@@ -58,8 +58,9 @@ payments, financial flows, audits, risk decisions, and irreversible actions.
   Deterministically computed as:
 H("VAX-SAI" || prev_hash || H(action_object) || gi)
 
-- **Semantic Object (SO)**  
-A strict schema defining allowed fields, types, ranges, and semantics.
+- **Semantic Object Factory** (SOF)
+A backend-defined factory that validates, normalizes,
+and produces immutable Semantic Data Transfer Objects (SDTO).
 
 - **IRP — Inverse Responsibility Principle**  
 Semantics are defined by the backend; normalization happens at the producer.
@@ -73,33 +74,157 @@ Each `(user_id, device_id)` pair produces a single linear action history.
 
 VAX is **not a distributed consensus system**.
 
-Instead, VAX supports distributed environments by allowing
-**multiple independent, verifiable action histories** to coexist.
+VAX does not attempt to establish global agreement,
+leader election, quorum voting, or synchronized state.
 
-Each Actor maintains a fully independent, linear history.
-There is no global ordering, cross-Actor merging, or synchronization.
+Instead, VAX supports distributed environments by providing
+**independent, verifiable action histories** that can be safely
+produced, exchanged, and verified without coordination.
+
+Each Actor maintains a strictly linear action history.
+There is no global ordering across Actors, and no cross-Actor
+merging or reconciliation.
 
 In distributed systems, nodes may:
-- Maintain their own Actor histories
-- Independently verify histories produced elsewhere
-- Exchange verified action records without coordination
 
-No central authority, shared state, or consensus mechanism is required.
+- Produce actions for their own Actors
+- Verify action histories produced elsewhere
+- Exchange or replicate verified actions asynchronously
 
-This model avoids the complexity of distributed merging while still
-providing strong guarantees of integrity, auditability, and determinism.
+VAX does not require a shared runtime state or
+distributed coordination to perform verification.
+
+This design avoids the complexity of consensus and distributed
+merging, while still providing strong guarantees of:
+
+- historical integrity  
+- auditability  
+- deterministic verification  
+
+These properties allow VAX to operate **within** distributed
+systems without becoming a distributed coordination mechanism.
+
+VAX does not coordinate consensus.
+It enforces a single writable present by design.
+Consensus emerges naturally from this constraint.
+
+VAX L0 is not an alternative to Raft.
+
+It can be used **under** Raft (to make actions tamper-evident),
+or **beside** Raft (to provide actor-level history integrity),
+but it does not attempt to replace distributed log replication.
+
+---
+
+### Distributed Usage (SDK Behavior)
+
+The VAX SDK is designed to behave correctly in distributed
+deployments by enforcing a single invariant:
+
+> **One Actor produces one canonical action history.**
+
+Each SDK instance operates on exactly one Actor and produces
+actions against a locally maintained execution context.
+
+The SDK ensures that:
+
+- each action references its immediate predecessor (`prevSAI`)
+- action validity can be determined locally
+- verification does not require global state or synchronization
+
+In practice, this makes it possible for:
+
+- multiple nodes to concurrently produce actions for different Actors
+- verified actions to be transferred or replicated across systems
+- receivers to verify actions out-of-band or asynchronously
+
+The SDK does **not**:
+
+- merge histories
+- arbitrate conflicts
+- compare actions across Actors
+
+Conflict resolution and interpretation are explicitly delegated
+to higher layers (L1/L2).
+
+From an implementation perspective, an action emitted by the SDK
+is verifiable given only its `SAE`, `SAI`, and `prevSAI`.
+
+---
+
+### Implementation Model
+
+A minimal distributed verifier may be implemented using an
+append-only key-value structure:
+
+
+```
+
+Map<SAI, SAE>
+
+```
+
+Verification proceeds as follows:
+
+1. Extract `prevSAI` from the incoming action
+2. Lookup `prevSAI` in local storage
+3. Verify:
+   - canonicalized SAE bytes
+   - derived `gi`
+   - computed `SAI`
+4. Store `(SAI, SAE)` if verification succeeds
+
+This enables O(1) local verification and allows
+partial history replication without reprocessing
+entire chains.
+
+---
+
+### Write Discipline
+
+VAX L0 defines a strict write gate for establishing action history.
+
+Before mutating persistent application state, systems MUST:
+
+1. Submit the corresponding action to VAX L0
+2. Receive a successful commit acknowledgment
+3. Apply the derived state change
+
+This constraint ensures that all persistent mutations
+are backed by a canonical, verifiable action record.
+
+Read paths, projections, and derived state rebuilding
+remain unrestricted.
+
 
 ---
 
 ## Design Philosophy
 
-VAX does not try to prevent mistakes.
+VAX does not try to prevent mistakes.  
 It makes them **impossible to quietly rewrite**.
 
 > *You may do the wrong thing — but you cannot pretend it never happened.*
 
 Like Git, VAX does not enforce workflows.
 It only guarantees history integrity.
+
+---
+
+### Write Gate API
+
+```
+bool Commit(string baseSAI)
+```
+Contract:
+
+baseSAI MUST be the latest committed SAI known to the caller
+
+Returns true if the action is appended successfully
+
+Returns false if baseSAI is stale or conflicts with history
+
+The SDK MUST NOT mutate application state when Commit returns false
 
 ---
 

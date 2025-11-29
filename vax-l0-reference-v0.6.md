@@ -141,10 +141,78 @@ while preserving strong integrity and audit properties.
 VAX is therefore **not a distributed protocol**, but a system whose
 verification model remains valid under distribution.
 
+### 4.1 SDK-Level Distributed Semantics
+
+This specification defines protocol-level constraints.
+The following describes **SDK behavior**, not network requirements.
+
+In distributed deployments, VAX SDK instances MAY exist on multiple nodes.
+Each instance:
+
+- produces actions for exactly one Actor
+- maintains local counter and chain state
+- emits actions referencing `prevSAI`
+
+The SDK makes no assumptions about:
+- message ordering
+- delivery guarantees
+- transport topology
+- centralized coordination
+
+An SDK instance only needs knowledge of:
+- the last committed `SAI`
+- the Actor-bound secret (`K_chain`)
+
+As a result, SDK-generated actions can be:
+- verified independently
+- buffered if predecessors are unavailable
+- validated once dependencies arrive
+
+An action whose `prevSAI` is unknown is treated as **unverifiable**, not invalid.
+
+This allows action histories to be verified incrementally in
+distributed or partially replicated systems without chain merging.
+
+#### Conflict and Divergence Semantics
+
+Divergence between action histories is not treated as an error at the L0 level.
+
+VAX L0 deliberately avoids resolving conflicts or selecting a “correct” history.
+The presence of multiple incompatible histories represents **observable facts**,
+not protocol failure.
+
+In particular:
+
+- A missing `prevSAI` represents insufficient information, not invalid input
+- Conflicting histories indicate concurrent or inconsistent writes
+- No automatic repair, merge, or resolution is performed at L0
+
+Such conditions are **signals**, intended to be interpreted by higher layers
+(L1/L2), application logic, or operational policy.
+
+VAX L0 guarantees that:
+- divergence cannot occur silently
+- incompatible histories are explicitly detectable
+- all accepted history remains internally consistent and verifiable
+
+How conflicts are interpreted, prioritized, or resolved is explicitly
+out of scope for this specification.
+
 
 ---
 
 ## 5. Architectural Overview
+
+### Design Focus
+
+VAX L0 is an **action write pipeline**, not a coordination mechanism.
+
+Its sole responsibility is to decide whether an action
+is allowed to become part of persistent history.
+
+VAX L0 does not resolve conflicts or repair state.
+It only admits or rejects facts.
+
 
 Raw Input
 ↓
@@ -154,16 +222,15 @@ SDTO (immutable)
 ↓
 SAE (canonical encoding)
 ↓
-Counter prediction (+1)
+(counter_n, prevSAI)
 ↓
-gi = HMAC(K_chain, "VAX-GI" || counter)
+gi_n = HMAC(K_chain, "VAX-GI" || counter_n)
 ↓
-SAI = HASH(prevSAI || SAE || gi)
+SAI_n = HASH(prevSAI || SAE || gi_n)
 ↓
 (optional signature)
 ↓
-Submit → Verify → Append
-
+Action Envelope (submitted as-is)
 
 Backends **MUST NOT** modify semantics  
 Backends **ONLY verify** and append
@@ -172,17 +239,28 @@ Backends **ONLY verify** and append
 
 ## 6. Core Data Model
 
-### 6.1 Semantic Object (SO)
+### 6.1 Semantic Object Factory (SOF)
 
-An SO is a schema-defined semantic unit.
+The Semantic Object Factory (SOF) is the **producer-side semantic boundary**.
 
-Properties:
-- No business logic
-- Fully validated
-- Canonicalizable
-- Deterministic meaning
+It applies backend-defined semantic schemas to raw input,
+performing validation and normalization before any action
+can proceed to canonical encoding.
+
+The SOF is responsible for:
+
+- enforcing schema-defined semantic constraints
+- rejecting invalid or ambiguous input
+- normalizing input into a stable structure suitable for canonicalization
+
+The SOF does **not** contain business logic and does **not** produce
+side effects.
+
 
 ### 6.2 SDTO
+
+An SDTO is an immutable semantic data structure produced **only**
+by the SO Factory.
 
 An SDTO is an immutable output produced **only** by the SO Factory.
 
