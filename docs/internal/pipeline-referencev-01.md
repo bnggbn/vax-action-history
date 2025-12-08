@@ -201,7 +201,7 @@ These belong to L1/L2.
 
 # One-Sentence Summary
 
-VAX L0 destroys semantic ambiguity, enforces a single writable present,
-and emits immutable facts upon which higher-layer coordination may emerge.
+> VAX L0 destroys semantic ambiguity, enforces a single writable present,
+> and emits immutable facts upon which higher-layer coordination may emerge.
 
 ---2025_11_29---
