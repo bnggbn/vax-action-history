@@ -270,16 +270,47 @@ The SDK MUST NOT mutate application state when Commit returns false
 
 ## Directory Layout
 
+```
 vax/
-├── cmd/
-├── internal/
-│ └── action/
-├── test/
-├── go.mod
-├── go.sum
-├── README.md
-
-
+├── README.md                      # Introduction to VAX
+│
+├── docs/                          # Shared Documentation
+│   ├── ARCHITECTURE.md            # Design Philosophy (C/Go)
+│   ├── SPECIFICATION.md           # L0 Specification
+│   ├── C_API.md                   # C API Reference
+│   ├── GO_API.md                  # Go API Reference
+│   └── DEPLOYMENT.md              # Deployment Guide
+│
+├── c/                             # C SDK Implementation
+│   ├── README.md                  # How to use the C Toolkit
+│   ├── include/
+│   │   └── vax.h
+│   ├── src/
+│   │   ├── sai.c
+│   │   ├── sae.c
+│   │   ├── gi.c
+│   │   └── chain.c
+│   ├── tests/
+│   └── Makefile
+│
+├── go/                            # Go SDK Implementation
+│   ├── README.md                  # How to run the Go server
+│   ├── cmd/
+│   │   └── vaxd/                  # VAX daemon (Go server)
+│   ├── pkg/
+│   │   └── vax/                   # Go-native core VAX logic
+│   ├── internal/
+│   └── go.mod
+│
+├── examples/                      # Integration Examples
+│   ├── basic-c/
+│   ├── server-go/
+│   └── c-client-go-server/
+│
+└── scripts/                       # Developer Tools
+    ├── build-all.sh
+    └── test-all.sh
+```
 ---
 
 ## Test Philosophy
