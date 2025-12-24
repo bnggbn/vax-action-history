@@ -2,6 +2,10 @@
 #include "test_common.h"
 #include <string.h>
 #include <assert.h>
+// NOTE:
+// These verify tests assume SAE bytes are already canonicalized (VAX-JCS).
+// Verification focuses on chain integrity, not JSON normalization.
+
 
 // Test 1: verify valid action
 void test_verify_valid_action() {
@@ -14,7 +18,9 @@ void test_verify_valid_action() {
     uint16_t expected_counter = 0;
     uint8_t expected_prev_sai[VAX_SAI_SIZE];
     memset(expected_prev_sai, 0xAA, VAX_SAI_SIZE);
-    
+
+    // expected_counter is the last committed counter for this actor.
+    // Verification requires: submitted_counter == expected_counter + 1.
     // Create action
     uint16_t counter = 1;
     uint8_t prev_sai[VAX_SAI_SIZE];
@@ -35,7 +41,8 @@ void test_verify_valid_action() {
         expected_prev_sai,
         counter,
         prev_sai,
-        sae,
+        (const uint8_t*)sae,
+        strlen(sae),
         sai
     );
     
@@ -60,7 +67,8 @@ void test_verify_invalid_counter() {
         expected_prev_sai,
         10,             // submitted = 10 (should be 6)
         prev_sai,
-        sae,
+        (const uint8_t*)sae,
+        strlen(sae),
         sai
     );
     
@@ -89,7 +97,8 @@ void test_verify_invalid_prev_sai() {
         expected_prev_sai,
         1,
         wrong_prev_sai,  // Different prevSAI
-        sae,
+        (const uint8_t*)sae,
+        strlen(sae),
         sai
     );
     
@@ -126,7 +135,8 @@ void test_verify_invalid_sai() {
         expected_prev_sai,
         counter,
         prev_sai,
-        sae,
+        (const uint8_t*)sae,
+        strlen(sae),
         wrong_sai
     );
     
@@ -164,7 +174,8 @@ void test_verify_sequence() {
         genesis_sai, // expected prevSAI
         counter,
         genesis_sai,
-        sae1,
+        (const uint8_t*)sae1,
+        strlen(sae1),
         sai1
     );
     assert(result == VAX_OK);
@@ -185,7 +196,8 @@ void test_verify_sequence() {
         sai1,  // expected prevSAI
         counter,
         sai1,
-        sae2,
+        (const uint8_t*)sae2,
+        strlen(sae2),
         sai2
     );
     assert(result == VAX_OK);

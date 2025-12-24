@@ -41,7 +41,6 @@ message(STATUS "OpenSSL include: ${OPENSSL_INCLUDE_DIR}")
 set(VAX_SOURCES
     src/gi.c
     src/sai.c
-    src/sae.c
     src/verify.c
 )
 
