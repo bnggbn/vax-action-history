@@ -1,0 +1,68 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+bin/
+obj/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+!CMakeLists.txt
+
+# Compiled binaries
+*.exe
+*.out
+*.app
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.o
+
+# Test executables
+test_gi
+test_sai
+test_verify
+
+# Ninja
+.ninja_*
+build.ninja
+
+# Clang/LLVM
+compile_commands.json
+.cache/
+
+# Sanitizer outputs
+*.san
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Go
+go.work
+go.work.sum
+*.test
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.bak
+*~
