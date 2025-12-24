@@ -100,8 +100,8 @@ See full structure in [Directory Layout](#directory-layout).
 ## Roadmap
 
 ### v0.6 (Current)
-- [x] C core implementation
-- [x] Go verifier server
+- [O] C core implementation
+- [X] Go verifier server
 - [ ] Comprehensive test vectors
 - [ ] CLI tooling
 
