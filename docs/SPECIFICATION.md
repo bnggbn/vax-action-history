@@ -76,14 +76,22 @@ SAE is the canonical JSON representation of an action.
 ### 2.2 SAI (Semantic Action Identifier)
 
 SAI is a 32-byte hash computed as:
+
+**Two-stage hash (Implementation v2):**
 ```
+sae_hash = SHA256(SAE)
 SAI_n = SHA256(
     "VAX-SAI" ||
     prevSAI ||
-    SAE ||
+    sae_hash ||
     gi_n
 )
 ```
+
+**Design rationale:**
+- Avoids malloc for variable-length SAE
+- Provides domain separation via "VAX-SAI" label
+- Fixed-length message for the outer hash improves security
 
 **Representation:**
 - Binary: 32 bytes
@@ -791,7 +799,26 @@ L0 does not define coordination mechanism (out of scope).
 {"age":30,"city":"Tokyo","name":"Alice"}
 ```
 
-### 13.2 gi Derivation Test
+### 13.2 Genesis SAI Test Vector
+
+**Input:**
+- actor_id: `"user123:device456"`
+- genesis_salt (hex): `a1a2a3a4a5a6a7a8a9aaabacadaeafb0`
+
+**Expected Genesis SAI (hex):**
+```
+afc50728cd79e805a8ae06875a1ddf78ca11b0d56ec300b160fb71f50ce658c3
+```
+
+**Verification Command:**
+```bash
+printf '\x56\x41\x58\x2d\x47\x45\x4e\x45\x53\x49\x53'\
+       'user123:device456'\
+       '\xa1\xa2\xa3\xa4\xa5\xa6\xa7\xa8\xa9\xaa\xab\xac\xad\xae\xaf\xb0' | \
+openssl dgst -sha256
+```
+
+### 13.3 gi Derivation Test
 
 **Inputs:**
 ```
@@ -804,7 +831,7 @@ Counter: 1
 [To be computed by implementation]
 ```
 
-### 13.3 SAI Computation Test
+### 13.4 SAI Computation Test
 
 **Inputs:**
 ```
@@ -818,7 +845,7 @@ gi (hex): ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 [To be computed by implementation]
 ```
 
-### 13.4 Full Chain Test
+### 13.5 Full Chain Test
 
 **Genesis:**
 ```

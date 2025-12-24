@@ -53,18 +53,24 @@ vax_result_t vax_compute_gi(
 );
 
 /**
- * Compute SAI_n = SHA256("VAX-SAI" || prev_sai || sae || gi)
+ * Compute SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE) || gi)
  * 
- * @param prev_sai  Previous SAI (32 bytes)
- * @param sae       Canonical JSON string (NUL-terminated)
- * @param sae_len   Length of SAE (without NUL)
- * @param gi        gi for this action (32 bytes)
- * @param out_sai   Output buffer (must be 32 bytes)
+ * Two-stage hash:
+ * 1. sae_hash = SHA256(SAE)
+ * 2. SAI = SHA256("VAX-SAI" || prevSAI || sae_hash || gi)
+ * 
+ * This avoids malloc for variable-length SAE and provides domain separation.
+ * 
+ * @param prev_sai   Previous SAI (32 bytes)
+ * @param sae_bytes  Canonical JSON bytes
+ * @param sae_len    Length of SAE bytes
+ * @param gi         gi for this action (32 bytes)
+ * @param out_sai    Output buffer (must be 32 bytes)
  * @return VAX_OK on success
  */
 vax_result_t vax_compute_sai(
     const uint8_t prev_sai[VAX_SAI_SIZE],
-    const char* sae,
+    const uint8_t* sae_bytes,
     size_t sae_len,
     const uint8_t gi[VAX_GI_SIZE],
     uint8_t out_sai[VAX_SAI_SIZE]

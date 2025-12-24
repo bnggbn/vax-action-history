@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "ms-vscode.cmake-tools",
+    "ms-vscode.cpptools",
+    "llvm-vs-code-extensions.vscode-clangd",
+    "golang.go",
+    "ryanluker.vscode-coverage-gutters",
+    "github.copilot",
+    "github.copilot-chat"
+  ]
+}

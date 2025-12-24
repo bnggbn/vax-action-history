@@ -77,10 +77,21 @@ When implementing new features, prefer pure functions for testability. Use `vax_
 ## File Navigation
 
 - **Spec & Philosophy:** [docs/SPECIFICATION.md](../docs/SPECIFICATION.md), [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)
-- **C Core:** [c/include/vax.h](../c/include/vax.h) — Low-level primitives + stateful chain API
+- **C Core:** 
+  - [c/include/vax.h](../c/include/vax.h) — API definitions (15 functions)
+  - [c/src/gi.c](../c/src/gi.c) — HMAC-SHA256 gi derivation ✅
+  - [c/src/verify.c](../c/src/verify.c) — L0 verification logic ✅
+  - [c/src/sai.c](../c/src/sai.c), [c/src/sae.c](../c/src/sae.c) — TODO
+  - [c/CMakeLists.txt](../c/CMakeLists.txt) — Build configuration (Clang + OpenSSL)
+  - [c/BUILD.md](../c/BUILD.md) — Compilation instructions
 - **Go Implementation:** [go/internal/jcs/](../go/internal/jcs/) (canonicalization), [go/internal/sae/](../go/internal/sae/) (action envelope)
+- **Build System:** [.vscode/settings.json](../.vscode/settings.json) — CMake + Clang integration
 - **Reference Docs:** [docs/internal/](../docs/internal/) contains historical design docs
 
+- **Build system:** CMake + Ninja (prefers Clang over GCC)
+- **Dependencies:** OpenSSL (libssl, libcrypto) for HMAC-SHA256 and SHA256
+- **Sanitizers:** Debug builds enable AddressSanitizer + UndefinedBehaviorSanitizer
+- **Current status:** `gi.c` and `verify.c` implemented; `sai.c`, `sae.c` pending
 ## Language-Specific Notes
 
 ### C Implementation
@@ -101,12 +112,17 @@ When implementing new features, prefer pure functions for testability. Use `vax_
 # Go development
 cd go
 go test ./internal/jcs      # Test canonicalization
+go test -coverprofile=coverage.out ./...  # With coverage
 go run ./vax-demo           # Run demo
 
-# C development (when Makefile exists)
+# C development (CMake + Clang)
 cd c
-make                        # Build toolkit
-./vax-cli verify action.json
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release  # Configure
+cmake --build build                                  # Build libvax.a
+cmake -B build -DCMAKE_BUILD_TYPE=Debug             # Debug with sanitizers
+
+# Clean build
+rm -rf c/build && cmake -B c/build -G Ninja
 ```
 
 ## When in Doubt
