@@ -27,7 +27,7 @@
   // Go configuration
   "go.useLanguageServer": true,
   "go.toolsManagement.autoUpdate": true,
-  "go.testFlags": ["-v", "-race"],
+  "go.testFlags": ["-v"],
   "go.coverOnSave": false,
   "go.coverOnTestPackage": true,
 
