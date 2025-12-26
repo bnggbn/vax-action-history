@@ -1,5 +1,6 @@
 #include "vax.h"
 #include <string.h>
+#include <stdlib.h>
 #include <openssl/sha.h>
 
 #define VAX_SAI_LABEL "VAX-SAI"
@@ -36,7 +37,7 @@ vax_result_t vax_compute_sai(
 
 /**
  * Compute genesis prevSAI from genesis_salt
- * 
+ *
  * Genesis prevSAI = SHA256("VAX-GENESIS" || genesis_salt)
  */
 vax_result_t vax_compute_genesis_sai(
@@ -49,7 +50,7 @@ vax_result_t vax_compute_genesis_sai(
     }
 
     size_t actor_id_len = strlen(actor_id);
-    
+
     // Message: "VAX-GENESIS" || actor_id || genesis_salt
     size_t message_len = 11 + actor_id_len + VAX_GENESIS_SALT_SIZE;
     unsigned char* message = malloc(message_len);
@@ -63,6 +64,6 @@ vax_result_t vax_compute_genesis_sai(
 
     SHA256(message, message_len, out_genesis_sai);
     free(message);
-    
+
     return VAX_OK;
 }

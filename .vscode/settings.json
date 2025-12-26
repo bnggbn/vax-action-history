@@ -1,5 +1,6 @@
 {
   // CMake configuration
+  "cmake.cmakePath": "C:/Program Files/CMake/bin/cmake.exe",
   "cmake.configureOnOpen": true,
   "cmake.generator": "Ninja",
   "cmake.preferredGenerators": [
@@ -8,13 +9,13 @@
   ],
   "cmake.buildDirectory": "${workspaceFolder}/c/build",
   "cmake.sourceDirectory": "${workspaceFolder}/c",
-  
+
   // C/C++ configuration
   "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
   "C_Cpp.default.compilerPath": "clang",
   "C_Cpp.default.intelliSenseMode": "clang-x64",
   "C_Cpp.default.cStandard": "c11",
-  
+
   // Clangd configuration (alternative to C/C++ extension)
   "clangd.arguments": [
     "--compile-commands-dir=${workspaceFolder}/c/build",
@@ -22,14 +23,14 @@
     "--clang-tidy",
     "--background-index"
   ],
-  
+
   // Go configuration
   "go.useLanguageServer": true,
   "go.toolsManagement.autoUpdate": true,
   "go.testFlags": ["-v", "-race"],
   "go.coverOnSave": false,
   "go.coverOnTestPackage": true,
-  
+
   // Coverage Gutters (if installed)
   "coverage-gutters.coverageFileNames": [
     "coverage.out",
@@ -37,7 +38,7 @@
   ],
   "coverage-gutters.showGutterCoverage": true,
   "coverage-gutters.showLineCoverage": true,
-  
+
   // Editor settings
   "files.associations": {
     "*.h": "c",
@@ -45,7 +46,7 @@
   },
   "files.trimTrailingWhitespace": true,
   "files.insertFinalNewline": true,
-  
+
   // Terminal
   "terminal.integrated.defaultProfile.windows": "PowerShell"
 }

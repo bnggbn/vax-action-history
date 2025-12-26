@@ -4,6 +4,7 @@ cmake-build-*/
 out/
 bin/
 obj/
+vcpkg/
 
 # CMake
 CMakeCache.txt
