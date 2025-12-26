@@ -763,9 +763,15 @@ func TestWriteCanonicalValue_UnsupportedType(t *testing.T) {
 
 // 測 formatFloat 的 NaN / Infinity / -0 路徑
 func TestFormatFloat_NaNAndInfinity(t *testing.T) {
-	if got := formatFloat(math.NaN()); got != "0" {
-		t.Errorf("formatFloat(NaN) = %q, want %q", got, "0")
-	}
+	// NaN 現在應該 panic
+	t.Run("NaN", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Error("formatFloat(NaN) expected panic, got none")
+			}
+		}()
+		_ = formatFloat(math.NaN())
+	})
 
 	// Infinity 預期 panic
 	tests := []struct {

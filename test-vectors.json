@@ -1,0 +1,17 @@
+[
+  {
+    "name": "basic types",
+    "input": {"b": 2, "a": 1, "c": null, "d": true},
+    "expected": "{\"a\":1,\"b\":2,\"c\":null,\"d\":true}"
+  },
+  {
+    "name": "unicode string",
+    "input": "你好世界",
+    "expected": "\"\\u4f60\\u597d\\u4e16\\u754c\""
+  },
+  {
+    "name": "emoji",
+    "input": "😀🎉",
+    "expected": "\"\\ud83d\\ude00\\ud83c\\udf89\""
+  }
+]

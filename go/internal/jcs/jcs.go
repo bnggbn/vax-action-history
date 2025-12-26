@@ -241,12 +241,18 @@ func normalizeJSONNumber(raw string) (string, error) {
 }
 
 func formatFloat(f float64) string {
-	if f == 0 || math.IsNaN(f) {
-		// NaN 在 JSON 裡本來就不合法；這裡先全視為 0，之後你可以改成直接報錯
+	// Reject NaN explicitly
+	if math.IsNaN(f) {
+		panic("NaN is not allowed in VAX-JCS")
+	}
+
+	// Normalize -0 to 0
+	if f == 0 {
 		return "0"
 	}
+
+	// Reject Infinity
 	if math.IsInf(f, 0) {
-		// Infinity 同樣不允許，這裡先報錯比較好；不過為了簡單先 panic
 		panic("Infinity is not allowed in VAX-JCS")
 	}
 
