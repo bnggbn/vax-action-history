@@ -57,6 +57,7 @@ func ComputeSAI(prevSAI, saeBytes, gi []byte) ([]byte, error) {
 	// Two-stage hash
 	saeHash := sha256.Sum256(saeBytes)
 
+	// vax sai = 11
 	// message = "VAX-SAI" || prevSAI || saeHash || gi
 	message := make([]byte, 0, 7+SAISize+SAISize+GISize)
 	message = append(message, "VAX-SAI"...)
@@ -74,6 +75,7 @@ func ComputeGenesisSAI(actorID string, genesisSalt []byte) ([]byte, error) {
 		return nil, ErrInvalidInput
 	}
 
+	//VAX-GENESIS length = 11
 	message := make([]byte, 0, 11+len(actorID)+GenesisSaltSize)
 	message = append(message, "VAX-GENESIS"...)
 	message = append(message, []byte(actorID)...)

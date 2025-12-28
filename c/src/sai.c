@@ -37,8 +37,7 @@ vax_result_t vax_compute_sai(
 
 /**
  * Compute genesis prevSAI from genesis_salt
- *
- * Genesis prevSAI = SHA256("VAX-GENESIS" || genesis_salt)
+ * SAI_0 = SHA256("VAX-GENESIS" || actor_id || genesis_salt)
  */
 vax_result_t vax_compute_genesis_sai(
     const char* actor_id,
