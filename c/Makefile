@@ -5,7 +5,7 @@ CFLAGS = -Wall -Wextra -std=c11 -O2 -Iinclude
 LDFLAGS = -lssl -lcrypto
 
 # Source files
-SRCS = src/gi.c src/sai.c src/sae.c src/verify.c
+SRCS = src/gi.c src/sai.c src/verify.c
 OBJS = $(SRCS:.c=.o)
 
 # Output library

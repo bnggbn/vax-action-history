@@ -43,65 +43,36 @@ saeBytes, err := jcs.Marshal(action)
 ### 3. Go/TS Handle JSON + State
 - JSON canonicalization → `go/internal/jcs/` or `ts/src/jcs.ts`
 - State tracking (counter, prevSAI) → application layer
+# VAX — AI Coding Notes (concise)
 
-## Key Files
+Purpose
+- VAX is a multi-language, deterministic action-history tool: C implements crypto primitives; Go/TS implement canonicalization, state and application logic.
 
-| Purpose | Go | C | TypeScript |
-|---------|-----|---|-----------|
-| **Crypto primitives** | [pkg/vax/vax.go](../go/pkg/vax/vax.go) | [c/src/gi.c](../c/src/gi.c), [sai.c](../c/src/sai.c) | — |
-| **JCS canonicalization** | [internal/jcs/jcs.go](../go/internal/jcs/jcs.go) | — | [src/jcs.ts](../ts/src/jcs.ts) |
-| **API header** | — | [include/vax.h](../c/include/vax.h) | — |
-| **Spec** | [docs/SPECIFICATION.md](../docs/SPECIFICATION.md) | | |
+Key rules (must-follow)
+- C: crypto only — no JSON, no state, no chain logic (`c/src/gi.c`, `c/src/sai.c`).
+- Canonicalize actions with VAX-JCS: `go/internal/jcs/jcs.go` or `ts/src/jcs.ts` (do NOT use `json.Marshal`).
+- Hash formulas: `SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE) || gi_n)`; `gi = HMAC_SHA256(k_chain, "VAX-GI" || counter)` with counter as big-endian uint16.
 
-## Workflow Commands
+Quick workflows (copy-paste)
+- Go tests: `cd go && go test ./...`
+- C build+tests: `cd c && cmake -B build -G Ninja && cmake --build build && ctest --test-dir build`
+- TS tests: `cd ts && npm test`
 
-```bash
-# Go — run all tests
-cd go && go test ./...
+Where to edit safely
+- Add JSON/state or JCS changes in Go/TS only. See `go/pkg/vax/vax.go` for hash helpers.
+- If changing C, limit edits to pure crypto functions and run `c/test` unit tests.
 
-# C — build and test
-cd c && cmake -B build -G Ninja && cmake --build build && ctest --test-dir build
+Patterns & examples
+- Use `jcs.Marshal()` (Go) or `canonicalize()` (TS) before hashing SAE.
+- Tests and cross-language vectors live under `go/internal/jcs/`, `ts/src/jcs.*`, and `test-vectors.json`.
 
-# TypeScript — test
-cd ts && npm test
-```
+Common pitfalls
+- Accidentally using native JSON → nondeterministic outputs across languages.
+- Encoding the counter as little-endian (must be big-endian uint16).
 
-## Test Vectors (Cross-Language Verification)
+Helpful references
+- Spec & algorithms: `docs/SPECIFICATION.md`
+- JCS canonicalization: `go/internal/jcs/jcs.go`, `ts/src/jcs.ts`
+- Crypto primitives: `go/pkg/vax/vax.go`, `c/src/gi.c`, `c/src/sai.c`
 
-```
-# Genesis SAI — ALL implementations MUST produce this
-actor_id: "user123:device456"
-genesis_salt: a1a2a3a4a5a6a7a8a9aaabacadaeafb0
-Expected SAI: afc50728cd79e805a8ae06875a1ddf78ca11b0d56ec300b160fb71f50ce658c3
-
-# gi derivation (counter=1, zero k_chain)
-Expected gi: 96b0dbcec77032023871b0df25214723e5b053da24d50b8f3338ea55f9966a69
-```
-
-## Common Pitfalls
-
-| Mistake | Fix |
-|---------|-----|
-| Using `json.Marshal()` | Use `jcs.Marshal()` |
-| Adding state to C core | State belongs in Go/TS layer |
-| Adding JSON to C | C = crypto only |
-| Wrong hash formula | Two-stage: `SHA256("VAX-SAI" \|\| prevSAI \|\| SHA256(SAE) \|\| gi)` |
-| Little-endian counter | Counter MUST be big-endian uint16 |
-
-## Design Principles (Why?)
-
-1. **Tool, not protocol** — VAX doesn't prevent mistakes, it makes them impossible to quietly rewrite
-2. **Single linear history per actor** — No cross-actor merging; divergence is detected, not resolved
-3. **IRP (Inverse Responsibility)** — Producers normalize; backends only verify
-4. **Pure Go preferred** — Go implementation has zero dependencies (no CGo)
-
-## When in Doubt
-
-| Question | Answer |
-|----------|--------|
-| "How should I encode this action?" | Use VAX-JCS (`jcs.Marshal()` in Go, `canonicalize()` in TS) |
-| "How do I compute hashes?" | Go: `vax.ComputeGI()`, `vax.ComputeSAI()` / C: `vax_compute_*()` |
-| "Should I add JSON handling to C?" | No. C = crypto only |
-| "Should I merge histories?" | No. VAX detects divergence; resolution is L1+ |
-| "Where's the consensus mechanism?" | There isn't one. See [ARCHITECTURE.md](../docs/ARCHITECTURE.md) §2 |
-| "Can I modify SAE after creation?" | No. Actions are immutable once hashed |
+If anything in these notes is unclear or you want more examples (small patches showing correct `jcs.Marshal()` usage or GI/SAI tests), tell me which area to expand.
