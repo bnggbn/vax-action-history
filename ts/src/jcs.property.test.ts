@@ -25,29 +25,25 @@ describe('Property-based tests', () => {
     );
   });
 
-  test('object keys always sorted', () => {
-    fc.assert(
-      fc.property(
-        fc.dictionary(fc.string(), fc.oneof(fc.constant(null), fc.boolean(), fc.integer())),
-        (obj) => {
-          if (Object.keys(obj).length < 2) return; // Skip if too few keys
+ test('object keys always sorted (textual order)', () => {
+  fc.assert(
+    fc.property(
+      fc.dictionary(fc.string(), fc.oneof(fc.constant(null), fc.boolean(), fc.integer())),
+      (obj) => {
+        const canonical = marshal(obj).toString();
 
-          const canonical = marshal(obj).toString();
-          const keys = Object.keys(obj).sort();
+        // 抽出 JSON text 中的 key 順序（簡單 regex 版）
+        const keysInText = [...canonical.matchAll(/"((?:[^"\\]|\\.)*)":/g)]
+          .map(m => JSON.parse(`"${m[1]}"`));
 
-          // Check keys appear in sorted order
-          for (let i = 0; i < keys.length - 1; i++) {
-            const key1 = keys[i];
-            const key2 = keys[i + 1];
-            const idx1 = canonical.indexOf(`"${key1}":`);
-            const idx2 = canonical.indexOf(`"${key2}":`);
-            expect(idx1).toBeLessThan(idx2);
-          }
-        }
-      ),
-      { numRuns: 100 }
-    );
-  });
+        const expected = Object.keys(obj).sort();
+
+        expect(keysInText).toEqual(expected);
+      }
+    )
+  );
+});
+
 
   test('no whitespace in output', () => {
     fc.assert(
@@ -58,7 +54,8 @@ describe('Property-based tests', () => {
         ),
         (value) => {
           const canonical = marshal(value).toString();
-          expect(canonical).not.toMatch(/\s/);
+          const withoutStrings = canonical.replace(/"(?:[^"\\]|\\.)*"/g, '""');
+          expect(withoutStrings).not.toMatch(/\s/);
         }
       ),
       { numRuns: 100 }

@@ -1,5 +1,5 @@
 import { marshal } from './jcs';
-import * as testVectors from '../../test-vectors.json';
+import testVectors from '../../test-vectors.json';
 
 interface TestVector {
   name: string;

@@ -140,17 +140,7 @@ function formatNumber(num: number): string {
     throw new Error('Infinity is not allowed in VAX-JCS');
   }
 
-  const str = num.toString();
-
-  // VAX-JCS design decision: reject numbers that would use scientific notation
-  // This keeps numbers within a reasonable, predictable range
-  if (str.includes('e') || str.includes('E')) {
-    throw new Error(
-      `Number too large/small for VAX-JCS (would use scientific notation): ${num}`
-    );
-  }
-
-  return str;
+  return toPlainNumberString(num);
 }
 
 function hex2(byte: number): string {
@@ -162,14 +152,25 @@ function hex4(code: number): string {
 }
 
 export function normalizeJSONNumber(raw: string): string {
-  const decimalPattern = /^-?(0|[1-9][0-9]*)(\.[0-9]+)?$/;
+  const decimalPattern = /^-?[0-9]+(\.[0-9]+)?$/;
 
   if (!decimalPattern.test(raw)) {
     throw new Error(`Non-decimal number not allowed: ${raw}`);
   }
 
-  if (raw.startsWith('-0') && raw !== '-0' && !raw.startsWith('-0.')) {
-    throw new Error(`Invalid leading zero: ${raw}`);
+  const isNegative = raw.startsWith('-');
+  const unsigned = isNegative ? raw.slice(1) : raw;
+  const hasDecimal = raw.includes('.');
+
+  if (
+    unsigned.length > 1 &&
+    unsigned.startsWith('0') &&
+    !(hasDecimal && unsigned.startsWith('0.'))
+  ) {
+    if (isNegative) {
+      throw new Error(`Invalid leading zero: ${raw}`);
+    }
+    throw new Error(`Non-decimal number not allowed: ${raw}`);
   }
 
   const num = parseFloat(raw);
@@ -182,5 +183,49 @@ export function normalizeJSONNumber(raw: string): string {
     return '0';
   }
 
-  return formatNumber(num);
+  return toPlainNumberString(num);
+}
+
+function toPlainNumberString(num: number): string {
+  const str = num.toString();
+  const sciIndex = str.search(/[eE]/);
+
+  if (sciIndex === -1) {
+    return str;
+  }
+
+  const [mantissa, exponentPart] = str.toLowerCase().split('e');
+  const exponent = parseInt(exponentPart, 10);
+
+  // Reject extreme exponents to keep numbers within a manageable, predictable range
+  if (Math.abs(exponent) > 12) {
+    throw new Error(
+      `Number too large/small for VAX-JCS (would use scientific notation): ${num}`
+    );
+  }
+
+  const sign = mantissa.startsWith('-') ? '-' : '';
+  const unsignedMantissa = mantissa.replace('-', '');
+  const parts = unsignedMantissa.split('.');
+  const intPart = parts[0];
+  const fracPart = parts[1] ?? '';
+  const digits = intPart + fracPart;
+
+  const decimalIndex = intPart.length + exponent;
+  let plain: string;
+
+  if (decimalIndex <= 0) {
+    plain = '0.' + '0'.repeat(-decimalIndex) + digits;
+  } else if (decimalIndex >= digits.length) {
+    plain = digits + '0'.repeat(decimalIndex - digits.length);
+  } else {
+    plain = `${digits.slice(0, decimalIndex)}.${digits.slice(decimalIndex)}`;
+  }
+
+  // Trim trailing zeros in fractional part
+  if (plain.includes('.')) {
+    plain = plain.replace(/\.?0+$/, '').replace(/\.$/, '');
+  }
+
+  return sign + plain;
 }
