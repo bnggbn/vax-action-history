@@ -1,0 +1,29 @@
+﻿# Auto detect text files and normalize line endings to LF
+* text=auto eol=lf
+
+# Explicitly set text files
+*.c text
+*.h text
+*.go text
+*.ts text
+*.js text
+*.md text
+*.json text
+*.txt text
+*.yml text
+*.yaml text
+
+# Windows-specific files
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
