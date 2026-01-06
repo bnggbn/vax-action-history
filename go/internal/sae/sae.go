@@ -7,17 +7,17 @@ import (
 )
 
 type SAE struct {
-	ActionType string                 `json:"action_type"`
-	Timestamp  int64                  `json:"timestamp"`
-	Payload    map[string]interface{} `json:"payload"`
+	ActionType string         `json:"action_type"`
+	Timestamp  int64          `json:"timestamp"`
+	SDTO       map[string]any `json:"sdto"`
 }
 
 // BuildSAE builds a Semantic Action Envelope using the project's JCS canonicalizer.
-func BuildSAE(actionType string, payload map[string]interface{}) ([]byte, error) {
+func BuildSAE(actionType string, sdto map[string]any) ([]byte, error) {
 	env := SAE{
 		ActionType: actionType,
 		Timestamp:  time.Now().UnixMilli(),
-		Payload:    payload,
+		SDTO:       sdto,
 	}
 
 	// IMPORTANT:
