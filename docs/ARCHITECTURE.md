@@ -1,7 +1,7 @@
 # VAX Architecture & Design Philosophy
 
-**Version:** 0.6  
-**Date:** 2025-12-08  
+**Version:** 0.7
+**Date:** 2026-01-07
 **Status:** Reference Design Document
 
 ---
@@ -33,7 +33,7 @@ Like Git:
 
 **Key Insight:**
 
-VAX does not prevent mistakes.  
+VAX does not prevent mistakes.
 It makes them **impossible to quietly rewrite**.
 
 > *You may do the wrong thing — but you cannot pretend it never happened.*
@@ -79,11 +79,11 @@ VAX sidesteps this by design:
 
 Each action references its immediate predecessor via `prevSAI`.
 
-Verification is therefore **local and compositional**:
-given `(prevSAI, SAE, gi)`, correctness can be determined without global state.
+Verification is therefore local and compositional:
+given `prevSAI` and the server’s current commit state, continuity can be determined without global coordination.
 
 This means:
-- Any node may independently verify an action history
+- Any node may independently verify chain continuity
 - Histories may be stored, exchanged, or partially replicated
 - Missing predecessors render actions *unverifiable*, not *invalid*
 
@@ -148,22 +148,22 @@ SDTO (immutable)
     ↓
 SAE (canonical encoding)
     ↓
-(counter_n, prevSAI)
+prevSAI
     ↓
-gi_n = HMAC(K_chain, "VAX-GI" || counter_n)
+gi = random entropy (SDK-internal, single-use)
     ↓
-SAI_n = HASH(prevSAI || SAE || gi_n)
+SAI = HASH(prevSAI || SAE || gi)
     ↓
 Action Envelope
     ↓
-Backend: VERIFY (never modify)
+Backend: VERIFY prevSAI continuity (never modify)
     ↓
 COMMIT or REJECT
 ```
 
 **Critical Constraint:**
 
-Backends **MUST NOT** modify semantics.  
+Backends **MUST NOT** modify semantics.
 Backends **ONLY verify** and append.
 
 ### Why This Constraint?
@@ -246,7 +246,7 @@ This ensures:
 
 ### Core Principle
 
-> Divergence is not an error at L0.  
+> Divergence is not an error at L0.
 > It is an observable fact.
 
 VAX L0 deliberately avoids resolving conflicts or selecting a "correct" history.
@@ -328,9 +328,9 @@ How conflicts are interpreted, prioritized, or resolved is explicitly
 - History is auditable
 
 **2. Replay Resistance**
-- Each action includes `counter` (strictly +1)
-- Each action includes `gi` (derived from session secret)
-- Same action cannot be submitted twice
+- Each action includes a single-use, SDK-internal entropy value (`gi`)
+- Replays fail due to `prevSAI` continuity
+
 
 **3. Canonical Determinism**
 - Same semantic input → same bytes
@@ -404,7 +404,7 @@ But VAX cannot prevent a compromised client from producing bad actions.
 
 | Threat | Defended? | How? |
 |--------|-----------|------|
-| Replay attack | ✅ Yes | Counter + gi |
+| Replay attack | ✅ Yes | prevSAI chain |
 | Reordering | ✅ Yes | prevSAI chain |
 | Omission | ✅ Yes | Gap detection |
 | Tampering | ✅ Yes | Hash verification |
@@ -476,7 +476,7 @@ Both are **tools for integrity**, not coordination protocols.
 
 ### Trade-off 1: No Branching
 
-**We chose:** Single linear history per Actor  
+**We chose:** Single linear history per Actor
 **We gave up:** Branching and merging
 
 **Why?**
@@ -495,7 +495,7 @@ Both are **tools for integrity**, not coordination protocols.
 
 ### Trade-off 2: HMAC Instead of Signatures
 
-**We chose:** HMAC (symmetric)  
+**We chose:** HMAC (symmetric)
 **We gave up:** Legal non-repudiation
 
 **Why?**
@@ -514,7 +514,7 @@ Both are **tools for integrity**, not coordination protocols.
 
 ### Trade-off 3: No Global Ordering
 
-**We chose:** Per-Actor ordering only  
+**We chose:** Per-Actor ordering only
 **We gave up:** Cross-Actor causality
 
 **Why?**
@@ -530,23 +530,23 @@ Both are **tools for integrity**, not coordination protocols.
 - Application-level causality tracking
 - External coordination layer
 
-### Trade-off 4: Strict Counter Enforcement
-
-**We chose:** Strict +1 counter  
-**We gave up:** Flexible retry logic
+### Trade-off 4: Counter as Metadata (Not Authority)
+**We chose:** Counter as non-authoritative metadata
+**We gave up:** Strict +1 counter and Flexible retry logic
 
 **Why?**
-- Prevents replay
-- Simplifies verification
-- Forces explicit conflict handling
-
+- Replay prevention is enforced by `prevSAI` continuity
+- Ordering is defined by `prevSAI`, not counters
+- Avoids false rejects on retries or drops
+- Prevents duplicated sequencing logic
 **When this hurts:**
 - Network failures during commit
-- SDK must carefully manage counter
-
+- Abnormal counter jumps may pass L0
 **Mitigation:**
 - SDK-level retry with state sync
 - Counter doesn't advance on failure
+- Treat counter as L1 signal
+- Alert or analyze, not block
 
 ---
 

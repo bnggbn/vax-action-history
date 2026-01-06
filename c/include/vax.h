@@ -37,22 +37,13 @@ typedef enum {
  *===========================================================================*/
 
 /**
- * Compute gi_n = HMAC_SHA256(k_chain, "VAX-GI" || counter)
- */
-vax_result_t vax_compute_gi(
-    const uint8_t k_chain[VAX_K_CHAIN_SIZE],
-    uint16_t counter,
-    uint8_t out_gi[VAX_GI_SIZE]
-);
-
-/**
  * Compute SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE) || gi)
+ * gi is generated internally using random bytes.
  */
 vax_result_t vax_compute_sai(
     const uint8_t prev_sai[VAX_SAI_SIZE],
     const uint8_t* sae_bytes,
     size_t sae_len,
-    const uint8_t gi[VAX_GI_SIZE],
     uint8_t out_sai[VAX_SAI_SIZE]
 );
 
@@ -71,25 +62,16 @@ vax_result_t vax_compute_genesis_sai(
 
 /**
  * Verify an action submission (crypto only, no JSON validation)
- * 
+ *
  * This performs:
- * 1. Verify counter is expected + 1
- * 2. Verify prevSAI matches
- * 3. Recompute gi
- * 4. Recompute SAI and verify
- * 
+ * - Verify prevSAI matches expected
+ *
  * NOTE: SAE canonicalization must be verified by the caller
  *       (e.g., Go server or JS frontend)
  */
 vax_result_t vax_verify_action(
-    const uint8_t k_chain[VAX_K_CHAIN_SIZE],
-    uint16_t expected_counter,
     const uint8_t expected_prev_sai[VAX_SAI_SIZE],
-    uint16_t counter,
-    const uint8_t prev_sai[VAX_SAI_SIZE],
-    const uint8_t* sae_bytes,
-    size_t sae_len,
-    const uint8_t sai[VAX_SAI_SIZE]
+    const uint8_t prev_sai[VAX_SAI_SIZE]
 );
 
 /*============================================================================

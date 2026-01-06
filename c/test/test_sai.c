@@ -49,158 +49,98 @@ void test_genesis_sai() {
 // Test 2: vax_compute_sai basic
 void test_sai_basic() {
     printf("\n=== Test: vax_compute_sai (basic) ===\n");
-    
+
     uint8_t prev_sai[VAX_SAI_SIZE] = {0};
     memset(prev_sai, 0x11, VAX_SAI_SIZE);
-    
+
     const char* sae = "{\"action\":\"test\",\"value\":42}";
     size_t sae_len = strlen(sae);
-    
-    uint8_t gi[VAX_GI_SIZE] = {0};
-    memset(gi, 0x22, VAX_GI_SIZE);
-    
+
     uint8_t sai[VAX_SAI_SIZE];
-    
-    vax_result_t result = vax_compute_sai(prev_sai, (const uint8_t*)sae, sae_len, gi, sai);
+
+    vax_result_t result = vax_compute_sai(prev_sai, (const uint8_t*)sae, sae_len, sai);
     assert(result == VAX_OK);
-    
+
     print_hex("prevSAI", prev_sai, VAX_SAI_SIZE);
     printf("SAE: %s (len=%zu)\n", sae, sae_len);
-    print_hex("gi     ", gi, VAX_GI_SIZE);
     print_hex("SAI    ", sai, VAX_SAI_SIZE);
-    
+
     printf("✓ sai_basic: produced 32-byte SAI\n");
 }
 
-// Test 3: vax_compute_sai deterministic
-void test_sai_deterministic() {
-    printf("\n=== Test: vax_compute_sai (deterministic) ===\n");
-    
+// Test 3: vax_compute_sai randomness (gi is random internally)
+void test_sai_randomness() {
+    printf("\n=== Test: vax_compute_sai (randomness) ===\n");
+
     uint8_t prev_sai[VAX_SAI_SIZE] = {0};
     const char* sae = "{\"test\":1}";
-    uint8_t gi[VAX_GI_SIZE] = {0};
-    
-    uint8_t sai1[VAX_SAI_SIZE];
-    uint8_t sai2[VAX_SAI_SIZE];
-    
-    vax_compute_sai(prev_sai, (const uint8_t*)sae, strlen(sae), gi, sai1);
-    vax_compute_sai(prev_sai, (const uint8_t*)sae, strlen(sae), gi, sai2);
-    
-    assert(memcmp(sai1, sai2, VAX_SAI_SIZE) == 0);
-    printf("✓ sai_deterministic: same input produces same SAI\n");
-}
 
-// Test 4: vax_compute_sai different SAE
-void test_sai_different_sae() {
-    printf("\n=== Test: vax_compute_sai (different SAE) ===\n");
-    
-    uint8_t prev_sai[VAX_SAI_SIZE] = {0};
-    uint8_t gi[VAX_GI_SIZE] = {0};
-    
-    const char* sae1 = "{\"action\":\"test1\"}";
-    const char* sae2 = "{\"action\":\"test2\"}";
-    
     uint8_t sai1[VAX_SAI_SIZE];
     uint8_t sai2[VAX_SAI_SIZE];
-    
-    vax_compute_sai(prev_sai, (const uint8_t*)sae1, strlen(sae1), gi, sai1);
-    vax_compute_sai(prev_sai, (const uint8_t*)sae2, strlen(sae2), gi, sai2);
-    
+
+    // Since gi is generated randomly inside, same inputs produce different outputs
+    vax_compute_sai(prev_sai, (const uint8_t*)sae, strlen(sae), sai1);
+    vax_compute_sai(prev_sai, (const uint8_t*)sae, strlen(sae), sai2);
+
     assert(memcmp(sai1, sai2, VAX_SAI_SIZE) != 0);
-    printf("✓ sai_different_sae: different SAE produces different SAI\n");
+    printf("✓ sai_randomness: same input produces different SAI (random gi)\n");
 }
 
-// Test 5: vax_compute_sai different prevSAI
-void test_sai_different_prev() {
-    printf("\n=== Test: vax_compute_sai (different prevSAI) ===\n");
-    
-    uint8_t prev_sai1[VAX_SAI_SIZE] = {0};
-    uint8_t prev_sai2[VAX_SAI_SIZE] = {0};
-    memset(prev_sai1, 0xAA, VAX_SAI_SIZE);
-    memset(prev_sai2, 0xBB, VAX_SAI_SIZE);
-    
-    const char* sae = "{\"action\":\"test\"}";
-    uint8_t gi[VAX_GI_SIZE] = {0};
-    
-    uint8_t sai1[VAX_SAI_SIZE];
-    uint8_t sai2[VAX_SAI_SIZE];
-    
-    vax_compute_sai(prev_sai1, (const uint8_t*)sae, strlen(sae), gi, sai1);
-    vax_compute_sai(prev_sai2, (const uint8_t*)sae, strlen(sae), gi, sai2);
-    
-    assert(memcmp(sai1, sai2, VAX_SAI_SIZE) != 0);
-    printf("✓ sai_different_prev: different prevSAI produces different SAI\n");
-}
-
-// Test 6: Full chain simulation
+// Test 4: Full chain simulation
 void test_chain_simulation() {
     printf("\n=== Test: Chain simulation ===\n");
-    
+
     // Setup
     const char* actor_id = "alice:laptop";
-    uint8_t k_chain[VAX_K_CHAIN_SIZE];
-    memset(k_chain, 0x42, VAX_K_CHAIN_SIZE);
-    
+
     uint8_t genesis_salt[VAX_GENESIS_SALT_SIZE];
     memset(genesis_salt, 0xAB, VAX_GENESIS_SALT_SIZE);
-    
+
     // Genesis
     uint8_t prev_sai[VAX_SAI_SIZE];
     vax_compute_genesis_sai(actor_id, genesis_salt, prev_sai);
     printf("Genesis SAI computed\n");
-    
+
     // Action 1
-    uint16_t counter = 1;
     const char* sae1 = "{\"action\":\"create\",\"id\":1}";
-    uint8_t gi1[VAX_GI_SIZE];
     uint8_t sai1[VAX_SAI_SIZE];
-    
-    vax_compute_gi(k_chain, counter, gi1);
-    vax_compute_sai(prev_sai, (const uint8_t*)sae1, strlen(sae1), gi1, sai1);
+
+    vax_compute_sai(prev_sai, (const uint8_t*)sae1, strlen(sae1), sai1);
     print_hex("SAI_1  ", sai1, VAX_SAI_SIZE);
-    
+
     // Action 2
-    counter = 2;
     const char* sae2 = "{\"action\":\"update\",\"id\":1}";
-    uint8_t gi2[VAX_GI_SIZE];
     uint8_t sai2[VAX_SAI_SIZE];
-    
-    vax_compute_gi(k_chain, counter, gi2);
-    vax_compute_sai(sai1, (const uint8_t*)sae2, strlen(sae2), gi2, sai2);
+
+    vax_compute_sai(sai1, (const uint8_t*)sae2, strlen(sae2), sai2);
     print_hex("SAI_2  ", sai2, VAX_SAI_SIZE);
-    
+
     // Verify chain properties
-    assert(memcmp(gi1, gi2, VAX_GI_SIZE) != 0);  // Different gi
     assert(memcmp(sai1, sai2, VAX_SAI_SIZE) != 0);  // Different SAI
-    
+
     printf("✓ chain_simulation: 2-action chain successful\n");
 }
 
-// Test 7: SAI error handling
+// Test 5: SAI error handling
 void test_sai_error_handling() {
     printf("\n=== Test: vax_compute_sai (error handling) ===\n");
-    
+
     uint8_t prev_sai[VAX_SAI_SIZE] = {0};
     const char* sae = "{\"test\":1}";
-    uint8_t gi[VAX_GI_SIZE] = {0};
     uint8_t sai[VAX_SAI_SIZE];
-    
+
     // NULL prev_sai
-    vax_result_t result = vax_compute_sai(NULL, (const uint8_t*)sae, strlen(sae), gi, sai);
+    vax_result_t result = vax_compute_sai(NULL, (const uint8_t*)sae, strlen(sae), sai);
     assert(result == VAX_ERR_INVALID_INPUT);
-    
+
     // NULL sae
-    result = vax_compute_sai(prev_sai, NULL, 10, gi, sai);
+    result = vax_compute_sai(prev_sai, NULL, 10, sai);
     assert(result == VAX_ERR_INVALID_INPUT);
-    
-    // NULL gi
-    result = vax_compute_sai(prev_sai, (const uint8_t*)sae, strlen(sae), NULL, sai);
-    assert(result == VAX_ERR_INVALID_INPUT);
-    
+
     // NULL output
-    result = vax_compute_sai(prev_sai, (const uint8_t*)sae, strlen(sae), gi, NULL);
+    result = vax_compute_sai(prev_sai, (const uint8_t*)sae, strlen(sae), NULL);
     assert(result == VAX_ERR_INVALID_INPUT);
-    
+
     printf("✓ sai_error_handling: NULL checks work\n");
 }
 
@@ -212,18 +152,16 @@ int main(void) {
     printf("╔════════════════════════════════════════╗\n");
     printf("║  VAX SAI Test Suite                   ║\n");
     printf("╚════════════════════════════════════════╝\n");
-    
+
     test_genesis_sai();
     test_sai_basic();
-    test_sai_deterministic();
-    test_sai_different_sae();
-    test_sai_different_prev();
+    test_sai_randomness();
     test_chain_simulation();
     test_sai_error_handling();
 
     printf("\n╔════════════════════════════════════════╗\n");
     printf("║  All SAI tests passed! ✓              ║\n");
     printf("╚════════════════════════════════════════╝\n");
-    
+
     return 0;
 }

@@ -1,9 +1,8 @@
 package vax
 
 import (
-	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 )
 
@@ -21,33 +20,21 @@ var (
 const (
 	SAISize         = 32
 	GISize          = 32
-	KChainSize      = 32
 	GenesisSaltSize = 16
 )
 
-// ComputeGI computes gi_n = HMAC_SHA256(k_chain, "VAX-GI" || counter)
-func ComputeGI(kChain []byte, counter uint16) ([]byte, error) {
-	if len(kChain) != KChainSize {
-		return nil, ErrInvalidInput
-	}
-
-	// Message: "VAX-GI" || counter (big-endian)
-	message := make([]byte, 8)
-	copy(message, "VAX-GI")
-	binary.BigEndian.PutUint16(message[6:], counter)
-
-	// HMAC-SHA256
-	mac := hmac.New(sha256.New, kChain)
-	mac.Write(message)
-	return mac.Sum(nil), nil
+// ComputeGI = random 32 bytes
+func computeGI() ([]byte, error) {
+    gi := make([]byte, 32) // 256-bit
+    if _, err := rand.Read(gi); err != nil {
+        return nil, err
+    }
+    return gi, nil
 }
 
 // ComputeSAI computes SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE) || gi)
-func ComputeSAI(prevSAI, saeBytes, gi []byte) ([]byte, error) {
+func ComputeSAI(prevSAI, saeBytes []byte) ([]byte, error) {
 	if len(prevSAI) != SAISize {
-		return nil, ErrInvalidInput
-	}
-	if len(gi) != GISize {
 		return nil, ErrInvalidInput
 	}
 	if len(saeBytes) == 0 {
@@ -56,6 +43,11 @@ func ComputeSAI(prevSAI, saeBytes, gi []byte) ([]byte, error) {
 
 	// Two-stage hash
 	saeHash := sha256.Sum256(saeBytes)
+
+	gi, err := computeGI()
+	if err != nil {
+		return nil, err
+	}
 
 	// vax sai = 11
 	// message = "VAX-SAI" || prevSAI || saeHash || gi
@@ -87,60 +79,20 @@ func ComputeGenesisSAI(actorID string, genesisSalt []byte) ([]byte, error) {
 
 // VerifyAction verifies an action submission (crypto only, no JSON validation)
 func VerifyAction(
-	kChain []byte,
-	expectedCounter uint16,
 	expectedPrevSAI []byte,
-	counter uint16,
 	prevSAI []byte,
-	saeBytes []byte,
-	sai []byte,
 ) error {
-	if len(kChain) != KChainSize {
-		return ErrInvalidInput
-	}
+
 	if len(expectedPrevSAI) != SAISize {
 		return ErrInvalidInput
 	}
 	if len(prevSAI) != SAISize {
 		return ErrInvalidInput
 	}
-	if len(sai) != SAISize {
-		return ErrInvalidInput
-	}
-	if len(saeBytes) == 0 {
-		return ErrInvalidInput
-	}
-
-	// Check counter overflow
-	if expectedCounter == 65535 {
-		return ErrCounterOverflow
-	}
-
-	// Verify counter is expected + 1
-	if counter != expectedCounter+1 {
-		return ErrInvalidCounter
-	}
 
 	// Verify prevSAI matches
 	if !bytesEqual(prevSAI, expectedPrevSAI) {
 		return ErrInvalidPrevSAI
-	}
-
-	// Recompute gi
-	computedGI, err := ComputeGI(kChain, counter)
-	if err != nil {
-		return err
-	}
-
-	// Recompute SAI
-	computedSAI, err := ComputeSAI(prevSAI, saeBytes, computedGI)
-	if err != nil {
-		return err
-	}
-
-	// Verify SAI matches
-	if !bytesEqual(sai, computedSAI) {
-		return ErrSAIMismatch
 	}
 
 	return nil
