@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"strconv"
 
-	"vax/internal/sae"
+	"vax/pkg/vax/sae"
 )
 
 // FluentAction 是你給 Consumer 的「量尺」

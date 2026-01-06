@@ -3,7 +3,7 @@ package sae
 import (
 	"time"
 
-	"vax/internal/jcs"
+	"vax/pkg/vax/jcs"
 )
 
 type SAE struct {
