@@ -1,78 +1,75 @@
-# VAX Action History — AI Coding Instructions
+# VAX Copilot Instructions
 
-## Project Overview
+Git-like tamper-evident action history. Multi-language SDK (C/Go/TS) with deterministic output.
 
-VAX is a **Git-like tool for tamper-evident action histories**. It provides deterministic, actor-bound action logs with cryptographic verification. Local-first, no blockchain required.
-
-**Core metaphor:** Git is to code what VAX is to actions.
-
-## Architecture at a Glance
-
+## Structure
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Language Implementations (all produce identical outputs)   │
-├─────────────┬─────────────────┬─────────────────────────────┤
-│  C (crypto) │  Go (pure)      │  TypeScript                 │
-│  libvax.a   │  pkg/vax        │  ts/src/jcs.ts              │
-│  OpenSSL    │  zero deps      │  zero deps                  │
-└─────────────┴─────────────────┴─────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Hash Chain: SAI_n = SHA256("VAX-SAI" || prevSAI ||         │
-│                              SHA256(SAE) || gi_n)           │
-└─────────────────────────────────────────────────────────────┘
+go/pkg/vax/     # Public SDK (zero internal deps)
+├── jcs/        # JSON Canonicalization
+├── sae/        # Semantic Action Envelope
+├── sdto/       # Schema-Driven Type Objects
+└── vax.go      # L0 crypto
+
+ts/src/         # TypeScript port
+c/src/          # Pure crypto (OpenSSL)
 ```
 
 ## Critical Rules
 
-### 1. NEVER Use Standard JSON Serialization
+**1. Always use JCS, never `json.Marshal`**
 ```go
-// ❌ WRONG
-jsonBytes, _ := json.Marshal(action)
-
-// ✅ CORRECT — Always use VAX-JCS
-import "vax/internal/jcs"
-saeBytes, err := jcs.Marshal(action)
+import "vax/pkg/vax/jcs"
+saeBytes, err := jcs.Marshal(action)  // ✓ deterministic
 ```
 
-### 2. C Core = Pure Crypto ONLY
-- ✅ `vax_compute_gi()`, `vax_compute_sai()`, `vax_verify_action()`
-- ❌ No JSON handling, no state management, no `vax_chain_*` functions
+**2. `pkg/vax/` = public SDK** → no `internal/` imports
 
-### 3. Go/TS Handle JSON + State
-- JSON canonicalization → `go/internal/jcs/` or `ts/src/jcs.ts`
-- State tracking (counter, prevSAI) → application layer
-# VAX — AI Coding Notes (concise)
+**3. Language boundaries**
+- C: crypto only (`vax_compute_gi`, `vax_compute_sai`, `vax_verify_action`)
+- Go/TS: JSON, state, validation
 
-Purpose
-- VAX is a multi-language, deterministic action-history tool: C implements crypto primitives; Go/TS implement canonicalization, state and application logic.
+**4. Hash formula**
+```
+SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE) || gi_n)
+gi_n  = HMAC_SHA256(k_chain, "VAX-GI" || counter)  # big-endian uint16
+```
 
-Key rules (must-follow)
-- C: crypto only — no JSON, no state, no chain logic (`c/src/gi.c`, `c/src/sai.c`).
-- Canonicalize actions with VAX-JCS: `go/internal/jcs/jcs.go` or `ts/src/jcs.ts` (do NOT use `json.Marshal`).
-- Hash formulas: `SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE) || gi_n)`; `gi = HMAC_SHA256(k_chain, "VAX-GI" || counter)` with counter as big-endian uint16.
+## SDTO Pattern
+Provider defines schema → consumer builds + validates → SAE bytes
 
-Quick workflows (copy-paste)
-- Go tests: `cd go && go test ./...`
-- C build+tests: `cd c && cmake -B build -G Ninja && cmake --build build && ctest --test-dir build`
-- TS tests: `cd ts && npm test`
+```go
+// Provider
+schema := sdto.NewSchemaBuilder().
+    SetActionStringLength("name", "1", "50").
+    SetActionNumberRange("amount", "0", "1000000").
+    BuildSchema()
 
-Where to edit safely
-- Add JSON/state or JCS changes in Go/TS only. See `go/pkg/vax/vax.go` for hash helpers.
-- If changing C, limit edits to pure crypto functions and run `c/test` unit tests.
+// Consumer
+saeBytes, _ := sdto.NewAction("transfer", schema).
+    Set("name", "Alice").
+    Set("amount", 500.0).
+    Finalize()
+```
 
-Patterns & examples
-- Use `jcs.Marshal()` (Go) or `canonicalize()` (TS) before hashing SAE.
-- Tests and cross-language vectors live under `go/internal/jcs/`, `ts/src/jcs.*`, and `test-vectors.json`.
+Validation at `.Set()` time, errors on `.Finalize()`.
 
-Common pitfalls
-- Accidentally using native JSON → nondeterministic outputs across languages.
-- Encoding the counter as little-endian (must be big-endian uint16).
+## Test Commands
+```bash
+go test ./...                   # All Go tests
+go test ./pkg/vax/...          # SDK only
+cd c && cmake -B build && cmake --build build && ctest --test-dir build
+cd ts && npm test              # TypeScript
+```
 
-Helpful references
-- Spec & algorithms: `docs/SPECIFICATION.md`
-- JCS canonicalization: `go/internal/jcs/jcs.go`, `ts/src/jcs.ts`
-- Crypto primitives: `go/pkg/vax/vax.go`, `c/src/gi.c`, `c/src/sai.c`
+## Common Pitfalls
+- `json.Marshal` → use `jcs.Marshal`
+- Counter → big-endian uint16
+- String min/max → `strconv.Atoi`
+- `pkg/` → cannot import `internal/`
 
-If anything in these notes is unclear or you want more examples (small patches showing correct `jcs.Marshal()` usage or GI/SAI tests), tell me which area to expand.
+## Docs
+- [SPECIFICATION.md](docs/SPECIFICATION.md)
+- [go/doct/changelog.md](go/doct/changelog.md)
+- [ts/CHANGELOG.md](ts/CHANGELOG.md)
+- [test-vectors.json](test-vectors.json) — cross-lang verification
+
