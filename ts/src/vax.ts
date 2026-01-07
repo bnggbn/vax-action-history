@@ -4,12 +4,14 @@
  * Git-like tamper-evident action history with deterministic output.
  */
 
+import { FieldSpec, validateData } from './sdto';
+import { Envelope, signEnvelope } from './sae';
+
 // ============================================================================
 // Constants
 // ============================================================================
 
 export const SAI_SIZE = 32;
-export const GI_SIZE = 32;
 export const GENESIS_SALT_SIZE = 16;
 
 // ============================================================================
@@ -37,19 +39,16 @@ export class InvalidPrevSAIError extends VaxError {
   }
 }
 
+export class SAIMismatchError extends VaxError {
+  constructor(message = 'SAI mismatch') {
+    super(message);
+    this.name = 'SAIMismatchError';
+  }
+}
+
 // ============================================================================
 // Internal Helpers
 // ============================================================================
-
-/**
- * Compute gi = random 32 bytes (256-bit)
- * Uses Web Crypto API for secure random generation.
- */
-function computeGI(): Uint8Array {
-  const gi = new Uint8Array(GI_SIZE);
-  crypto.getRandomValues(gi);
-  return gi;
-}
 
 /**
  * Constant-time byte array comparison
@@ -99,9 +98,9 @@ async function sha256(data: Uint8Array): Promise<Uint8Array> {
 // ============================================================================
 
 /**
- * Compute SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE) || gi)
+ * Compute SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE))
  *
- * gi is generated internally using random bytes.
+ * Matches Go's ComputeSAI signature (no gi parameter).
  *
  * @param prevSAI - Previous SAI (32 bytes)
  * @param saeBytes - Semantic Action Envelope bytes (must be JCS-canonicalized)
@@ -121,12 +120,9 @@ export async function computeSAI(
   // Two-stage hash
   const saeHash = await sha256(saeBytes);
 
-  // Generate random gi
-  const gi = computeGI();
-
-  // message = "VAX-SAI" || prevSAI || saeHash || gi
+  // message = "VAX-SAI" || prevSAI || saeHash
   const label = stringToBytes('VAX-SAI');
-  const message = concat(label, prevSAI, saeHash, gi);
+  const message = concat(label, prevSAI, saeHash);
 
   return sha256(message);
 }
@@ -155,16 +151,85 @@ export async function computeGenesisSAI(
 }
 
 /**
- * Verify an action submission (crypto only, no JSON validation)
+ * Verify an action submission (crypto + schema validation)
+ * saeBytes: canonical JSON bytes from client (already JCS-marshaled by Finalize)
  *
- * This verifies that prevSAI matches the expected value.
+ * Matches Go's VerifyAction signature.
+ *
+ * @param expectedPrevSAI - Expected previous SAI (32 bytes)
+ * @param prevSAI - Submitted previous SAI (32 bytes)
+ * @param saeBytes - SAE bytes (JCS-canonicalized)
+ * @param clientProvidedSAI - Client-computed SAI (32 bytes)
+ * @param schema - Validation schema
+ * @param privateKey - Ed25519 private key for signing (64 bytes)
+ * @returns Promise<Envelope> - Signed envelope
+ */
+export async function verifyAction(
+  expectedPrevSAI: Uint8Array,
+  prevSAI: Uint8Array,
+  saeBytes: Uint8Array,
+  clientProvidedSAI: Uint8Array,
+  schema: Record<string, FieldSpec>,
+  privateKey: Uint8Array
+): Promise<Envelope> {
+  // Input validation
+  if (expectedPrevSAI.length !== SAI_SIZE) {
+    throw new InvalidInputError(`expectedPrevSAI must be ${SAI_SIZE} bytes`);
+  }
+  if (prevSAI.length !== SAI_SIZE) {
+    throw new InvalidInputError(`prevSAI must be ${SAI_SIZE} bytes`);
+  }
+  if (saeBytes.length === 0) {
+    throw new InvalidInputError('saeBytes cannot be empty');
+  }
+
+  // Parse SAE from bytes
+  let envelope: Envelope;
+  try {
+    const json = new TextDecoder().decode(saeBytes);
+    envelope = JSON.parse(json) as Envelope;
+  } catch {
+    throw new InvalidInputError('invalid SAE JSON');
+  }
+
+  // Check that SAE is unsigned (sign sae just for records that service provider can't massage the action)
+  if (envelope.signature !== undefined) {
+    throw new InvalidInputError('SAE must be unsigned');
+  }
+
+  // Verify prevSAI matches
+  if (!bytesEqual(prevSAI, expectedPrevSAI)) {
+    throw new InvalidPrevSAIError();
+  }
+
+  // Verify SDTO against schema
+  validateData(envelope.sdto, schema);
+
+  // Verify clientProvidedSAI length
+  if (clientProvidedSAI.length !== SAI_SIZE) {
+    throw new InvalidInputError(`clientProvidedSAI must be ${SAI_SIZE} bytes`);
+  }
+
+  // Verify SAI
+  const computedSAI = await computeSAI(prevSAI, saeBytes);
+  if (!bytesEqual(computedSAI, clientProvidedSAI)) {
+    throw new SAIMismatchError();
+  }
+
+  // All good - sign SAE to settle down the history
+  return signEnvelope(envelope, privateKey);
+}
+
+/**
+ * Simple verification (crypto only, no JSON validation)
+ * For cases where you just need to verify prevSAI matches.
  *
  * @param expectedPrevSAI - Expected previous SAI (32 bytes)
  * @param prevSAI - Submitted previous SAI (32 bytes)
  * @throws InvalidInputError if inputs are invalid
  * @throws InvalidPrevSAIError if prevSAI doesn't match
  */
-export function verifyAction(
+export function verifyPrevSAI(
   expectedPrevSAI: Uint8Array,
   prevSAI: Uint8Array
 ): void {

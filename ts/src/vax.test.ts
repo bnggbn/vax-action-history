@@ -5,12 +5,11 @@
 import {
   computeSAI,
   computeGenesisSAI,
-  verifyAction,
+  verifyPrevSAI,
   toHex,
   fromHex,
   generateGenesisSalt,
   SAI_SIZE,
-  GI_SIZE,
   GENESIS_SALT_SIZE,
   InvalidInputError,
   InvalidPrevSAIError,
@@ -54,15 +53,15 @@ describe('VAX SDK', () => {
       expect(sai.length).toBe(SAI_SIZE);
     });
 
-    it('should produce different output each time (random gi)', async () => {
+    it('should produce same output for same inputs (deterministic, no gi)', async () => {
       const prevSAI = new Uint8Array(SAI_SIZE).fill(0x00);
       const sae = new TextEncoder().encode('{"test":1}');
 
       const sai1 = await computeSAI(prevSAI, sae);
       const sai2 = await computeSAI(prevSAI, sae);
 
-      // Since gi is random, same inputs should produce different outputs
-      expect(toHex(sai1)).not.toBe(toHex(sai2));
+      // Now deterministic (no random gi), same inputs should produce same outputs
+      expect(toHex(sai1)).toBe(toHex(sai2));
     });
 
     it('should throw on invalid prevSAI length', async () => {
@@ -76,29 +75,29 @@ describe('VAX SDK', () => {
     });
   });
 
-  describe('verifyAction', () => {
+  describe('verifyPrevSAI', () => {
     it('should pass for matching prevSAI', () => {
       const prevSAI = new Uint8Array(SAI_SIZE).fill(0xAA);
       const expectedPrevSAI = new Uint8Array(SAI_SIZE).fill(0xAA);
 
-      expect(() => verifyAction(expectedPrevSAI, prevSAI)).not.toThrow();
+      expect(() => verifyPrevSAI(expectedPrevSAI, prevSAI)).not.toThrow();
     });
 
     it('should throw InvalidPrevSAIError for non-matching prevSAI', () => {
       const expectedPrevSAI = new Uint8Array(SAI_SIZE).fill(0xAA);
       const wrongPrevSAI = new Uint8Array(SAI_SIZE).fill(0xBB);
 
-      expect(() => verifyAction(expectedPrevSAI, wrongPrevSAI))
+      expect(() => verifyPrevSAI(expectedPrevSAI, wrongPrevSAI))
         .toThrow(InvalidPrevSAIError);
     });
 
     it('should throw InvalidInputError for wrong expectedPrevSAI length', () => {
-      expect(() => verifyAction(new Uint8Array([0x01]), new Uint8Array(SAI_SIZE)))
+      expect(() => verifyPrevSAI(new Uint8Array([0x01]), new Uint8Array(SAI_SIZE)))
         .toThrow(InvalidInputError);
     });
 
     it('should throw InvalidInputError for wrong prevSAI length', () => {
-      expect(() => verifyAction(new Uint8Array(SAI_SIZE), new Uint8Array([0x01])))
+      expect(() => verifyPrevSAI(new Uint8Array(SAI_SIZE), new Uint8Array([0x01])))
         .toThrow(InvalidInputError);
     });
   });

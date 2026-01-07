@@ -35,7 +35,7 @@ VAX is designed for domains where **accountability matters**:
 ### Go (Recommended)
 
 ```bash
-go get github.com/anthropics/vax-action-history/go/pkg/vax
+go get github.com/bnggbn/vax-action-history/go/pkg/vax
 ```
 
 ```go
@@ -43,14 +43,15 @@ package main
 
 import (
     "fmt"
+    "crypto/rand"
     "vax/pkg/vax"
 )
 
 func main() {
     // Compute genesis SAI
     actorID := "user123:device456"
-    genesisSalt := []byte{0xa1, 0xa2, 0xa3, 0xa4, 0xa5, 0xa6, 0xa7, 0xa8,
-                          0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0}
+    genesisSalt := make([]byte, 16)
+    rand.Read(genesisSalt)
 
     sai, _ := vax.ComputeGenesisSAI(actorID, genesisSalt)
     fmt.Printf("Genesis SAI: %x\n", sai)
@@ -84,10 +85,10 @@ See [C Build Instructions](c/BUILD.md) for details.
 
 ## Core Concepts
 
-- **SAE** (Semantic Action Encoding) — Canonical JSON representation
-- **SAI** (Semantic Action Identifier) — Cryptographic hash: `SHA256("VAX-SAI" || prevSAI || SHA256(SAE) || gi)`
-- **Actor Chain** — One `(user, device)` = one linear history
-- **gi** — Per-action entropy: `HMAC(k_chain, "VAX-GI" || counter)`
+- **SAE** (Semantic Action Encoding) — Canonical JSON representation of an action
+- **SAI** (Semantic Action Identifier) — Cryptographic hash: `SHA256("VAX-SAI" || prevSAI || SHA256(SAE))`
+- **Actor Chain** — One `(user_id, device_id)` = one linear history
+- **prevSAI** — Each action references its predecessor, forming an append-only chain
 
 ---
 
@@ -107,13 +108,36 @@ See [Architecture & Philosophy](docs/ARCHITECTURE.md) for design rationale.
 
 ---
 
+## How It Works
+
+### 1. Genesis
+```
+SAI_0 = SHA256("VAX-GENESIS" || actor_id || genesis_salt)
+```
+Each Actor (user + device) starts with a unique genesis SAI.
+
+### 2. Action Chain
+```
+SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE))
+```
+Each subsequent action references the previous SAI, forming a tamper-evident chain.
+
+### 3. Verification
+Backend verifies:
+- prevSAI continuity (no gaps or reordering)
+- SAI computation correctness
+- Schema compliance
+- Backend signs the SAE to mark "action entered history"
+
+---
+
 ## Implementation Status
 
 | Language | Package | Status | Dependencies |
 |----------|---------|--------|--------------|
 | **Go** | `pkg/vax` | ✅ Complete | None (pure Go) |
 | **C** | `libvax.a` | ✅ Complete | OpenSSL |
-| **TypeScript** | `ts/` | ✅ JCS Complete | None |
+| **TypeScript** | `ts/` | ✅ Complete | None (pure TypeScript) |
 
 ### Cross-Language Verification
 
@@ -132,7 +156,7 @@ Expected: afc50728cd79e805a8ae06875a1ddf78ca11b0d56ec300b160fb71f50ce658c3
 
 - 🏗️ [Architecture & Design Philosophy](docs/ARCHITECTURE.md)
 - 📋 [L0 Technical Specification](docs/SPECIFICATION.md)
-- 🔧 [Go API Reference](go/cmd/doct/VAX_GO.md)
+- 🔧 [Go API Reference](go/README.md)
 - 🔨 [C Build Instructions](c/BUILD.md)
 
 ---
@@ -150,10 +174,15 @@ vax/
 │   └── test/              # Test suite
 ├── go/                # Go implementation (pure Go)
 │   ├── pkg/vax/           # Core cryptographic primitives
-│   ├── internal/jcs/      # VAX-JCS canonicalizer
-│   └── internal/sae/      # SAE builder
+│   ├── pkg/vax/jcs/       # VAX-JCS canonicalizer
+│   ├── pkg/vax/sae/       # SAE builder
+│   └── pkg/vax/sdto/      # Schema-driven validation
 └── ts/                # TypeScript implementation
-    └── src/               # JCS canonicalizer
+    └── src/
+        ├── jcs/           # JCS canonicalizer
+        ├── sae/           # SAE builder
+        ├── sdto/          # Schema-driven validation
+        └── vax.ts         # Core primitives
 ```
 
 ---
@@ -162,7 +191,7 @@ vax/
 
 ```bash
 # Go
-cd go && go test ./...
+cd go && go test ./pkg/vax/...
 
 # C
 cd c && ctest --test-dir build
@@ -173,13 +202,42 @@ cd ts && npm test
 
 ---
 
+## Design Philosophy
+
+### What VAX Provides
+- **Append-only history**: Actions cannot be removed or reordered
+- **Tamper-evident**: Any change to history is detectable
+- **Local-first**: No coordination required between actors
+- **Cross-language**: Deterministic results across implementations
+
+### What VAX Does NOT Provide
+- **Authorization**: VAX records what happened, not what's allowed
+- **Conflict resolution**: Divergent histories are detected, not merged
+- **Business logic**: Correctness is enforced at higher layers
+
+### Defense in Depth
+```
+┌─────────────────────────┐
+│   L2: Business Logic    │  ← Authorization, workflow
+├─────────────────────────┤
+│   L1: Semantic Layer    │  ← Schema, validation
+├─────────────────────────┤
+│   L0: VAX Integrity     │  ← Tamper evidence
+├─────────────────────────┤
+│   TLS                   │  ← Transport security
+└─────────────────────────┘
+```
+
+---
+
 ## Roadmap
 
-### v0.6 (Current)
+### v0.7 (Current)
 - [x] C core implementation
 - [x] Go pure implementation
-- [x] TypeScript JCS
+- [x] TypeScript complete implementation
 - [x] Cross-language test vectors
+- [x] Schema-driven validation (SDTO)
 - [ ] CLI tooling
 
 ### Future

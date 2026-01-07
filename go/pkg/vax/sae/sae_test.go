@@ -96,7 +96,7 @@ func TestSAE_Sign(t *testing.T) {
 	t.Run("valid signing", func(t *testing.T) {
 		pubKey, privKey, _ := GenerateKeyPair()
 
-		sae := &SAE{
+		sae := &Envelope{
 			ActionType: "transfer",
 			Timestamp:  1234567890,
 			SDTO:       map[string]any{"name": "alice"},
@@ -118,7 +118,7 @@ func TestSAE_Sign(t *testing.T) {
 
 		// Verify signature is valid
 		// Need to verify against the unsigned SAE
-		unsignedSAE := &SAE{
+		unsignedSAE := &Envelope{
 			ActionType: sae.ActionType,
 			Timestamp:  sae.Timestamp,
 			SDTO:       sae.SDTO,
@@ -131,7 +131,7 @@ func TestSAE_Sign(t *testing.T) {
 	})
 
 	t.Run("invalid private key", func(t *testing.T) {
-		sae := &SAE{
+		sae := &Envelope{
 			ActionType: "test",
 			Timestamp:  1234567890,
 			SDTO:       map[string]any{},
@@ -146,7 +146,7 @@ func TestSAE_Sign(t *testing.T) {
 	})
 
 	t.Run("empty private key", func(t *testing.T) {
-		sae := &SAE{
+		sae := &Envelope{
 			ActionType: "test",
 			Timestamp:  1234567890,
 			SDTO:       map[string]any{},
@@ -164,7 +164,7 @@ func TestSAE_SignAndVerify(t *testing.T) {
 	t.Run("full cycle", func(t *testing.T) {
 		pubKey, privKey, _ := GenerateKeyPair()
 
-		sae := &SAE{
+		sae := &Envelope{
 			ActionType: "transfer",
 			Timestamp:  1234567890,
 			SDTO:       map[string]any{"amount": 500},
@@ -205,7 +205,7 @@ func BenchmarkSign(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		sae := &SAE{
+		sae := &Envelope{
 			ActionType: "transfer",
 			Timestamp:  1234567890,
 			SDTO:       map[string]any{"name": "alice"},

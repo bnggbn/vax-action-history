@@ -1,5 +1,8 @@
 import { FieldSpec } from "./FieldSpec";
 
+// Supported sign types
+export const SupportedSignTypes = ["ed25519", "rsa", "ecdsa"] as const;
+
 // SchemaBuilder is the fluent builder for defining validation schemas
 export class SchemaBuilder {
   private actions: Record<string, FieldSpec> = {};
@@ -29,6 +32,24 @@ export class SchemaBuilder {
     this.actions[action] = {
       type: "string",
       enum: values,
+    };
+    return this;
+  }
+
+  // SetActionSign sets sign field with specified sign algorithm type
+  setActionSign(action: string, signType: string): this {
+    this.actions[action] = {
+      type: "sign",
+      enum: [signType],
+    };
+    return this;
+  }
+
+  // SetActionSignMulti sets sign field allowing multiple sign types
+  setActionSignMulti(action: string, signTypes: string[]): this {
+    this.actions[action] = {
+      type: "sign",
+      enum: signTypes,
     };
     return this;
   }

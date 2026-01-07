@@ -3,6 +3,7 @@ package vax
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"vax/pkg/vax/sae"
 	"vax/pkg/vax/sdto"
@@ -64,37 +65,66 @@ func ComputeGenesisSAI(actorID string, genesisSalt []byte) ([]byte, error) {
 }
 
 // VerifyAction verifies an action submission (crypto + schema validation)
+// saeBytes: canonical JSON bytes from client (already JCS-marshaled by Finalize)
 func VerifyAction(
 	expectedPrevSAI []byte,
 	prevSAI []byte,
-	sae *sae.SAE,
+	saeBytes []byte,
+	clientProvidedSAI []byte,
 	schema map[string]sdto.FieldSpec,
 	privateKey ed25519.PrivateKey,
-) error {
+) (*sae.Envelope, error) {
 
+	// Input validation
 	if len(expectedPrevSAI) != SAISize {
-		return ErrInvalidInput
+		return nil, ErrInvalidInput
 	}
 	if len(prevSAI) != SAISize {
-		return ErrInvalidInput
+		return nil, ErrInvalidInput
 	}
+	if len(saeBytes) == 0 {
+		return nil, ErrInvalidInput
+	}
+
+	// Parse SAE from bytes
+	var s sae.Envelope
+	if err := json.Unmarshal(saeBytes, &s); err != nil {
+		return nil, ErrInvalidInput
+	}
+
 	// Check that SAE is unsigned because sign sae just for records that service provider can't massaging the action
-	if sae.Signature != nil {
-		return ErrInvalidInput
+	if s.Signature != nil {
+		return nil, ErrInvalidInput
 	}
 
 	// Verify prevSAI matches
 	if !bytesEqual(prevSAI, expectedPrevSAI) {
-		return ErrInvalidPrevSAI
+		return nil, ErrInvalidPrevSAI
 	}
 
 	// Verify SDTO against schema
-	if err := sdto.ValidateData(sae.SDTO, schema); err != nil {
-		return err
+	if err := sdto.ValidateData(s.SDTO, schema); err != nil {
+		return nil, err
+	}
+
+	// Verify clientProvidedSAI length
+	if len(clientProvidedSAI) != SAISize {
+		return nil, ErrInvalidInput
+	}
+    // Verify SAI
+	computedSAI, err := ComputeSAI(prevSAI, saeBytes)
+	if err != nil {
+		return nil, err
+	}
+	if !bytesEqual(computedSAI, clientProvidedSAI) {
+		return nil, ErrSAIMismatch
 	}
 
 	// all good and sign SAE settle down the history at here
-	return sae.Sign(privateKey)
+	if err := s.Sign(privateKey); err != nil {
+		return nil, err
+	}
+	return &s, nil
 }
 
 func bytesEqual(a, b []byte) bool {

@@ -33,3 +33,86 @@
 ### Notes
 - This implementation maintains identical validation behavior with the Go SDK
 - All validation errors are accumulated and thrown on `finalize()`
+
+---
+
+## 2026-01-07
+
+### Added
+- **SAE Module** (`src/sae/`)
+  - `Envelope` interface: Semantic Action Envelope structure (action_type, timestamp, sdto, signature)
+  - `buildSAE()`: JCS-canonicalized SAE builder (matches Go's `sae.BuildSAE`)
+  - `signEnvelope()`: Ed25519 envelope signing (with Web Crypto API)
+  - `generateKeyPair()`: Ed25519 key pair generation
+
+- **Enhanced SDTO**
+  - `sign` type support in `FieldSpec` (for signature fields)
+  - `validateData()`: Server-side standalone validation function
+  - `SupportedSignTypes` constant: `["ed25519", "rsa", "ecdsa"]`
+  - `SchemaBuilder.setActionSign()`: Set single signature algorithm
+  - `SchemaBuilder.setActionSignMulti()`: Set multiple allowed signature algorithms
+
+- **Enhanced VAX Core**
+  - `verifyAction()`: Full verification (crypto + schema validation, matches Go signature)
+  - `verifyPrevSAI()`: Simple prevSAI verification (renamed from old `verifyAction`)
+  - `SAIMismatchError`: New error class for SAI verification failures
+
+### Changed
+- **BREAKING: `computeSAI()` now deterministic**
+  - Removed internal random `gi` generation
+  - Formula: `SHA256("VAX-SAI" || prevSAI || SHA256(SAE))`
+  - Same inputs now produce same outputs (matches Go version)
+
+- **BREAKING: `FluentAction.finalize()` signature change**
+  - Old: Returns `{ actionType: string; data: Record<string, unknown> }`
+  - New: Returns `Buffer` (JCS-canonicalized SAE bytes)
+  - Automatically calls `buildSAE()` internally
+
+- **BREAKING: Removed exports**
+  - `GI_SIZE` constant (gi no longer used in computeSAI)
+  - Old `verifyAction()` renamed to `verifyPrevSAI()`
+
+### Migration Guide
+
+**computeSAI() changes:**
+```typescript
+// Before (non-deterministic with random gi)
+const sai1 = await computeSAI(prevSAI, saeBytes);
+const sai2 = await computeSAI(prevSAI, saeBytes);
+// sai1 !== sai2 (different due to random gi)
+
+// After (deterministic)
+const sai1 = await computeSAI(prevSAI, saeBytes);
+const sai2 = await computeSAI(prevSAI, saeBytes);
+// sai1 === sai2 (same inputs → same output)
+```
+
+**FluentAction.finalize() changes:**
+```typescript
+// Before
+const result = action.set("name", "Alice").finalize();
+console.log(result.actionType, result.data);
+
+// After
+const saeBytes = action.set("name", "Alice").finalize();
+// saeBytes is JCS-canonicalized Buffer ready for hashing
+const sai = await computeSAI(prevSAI, saeBytes);
+```
+
+**verifyAction() renamed:**
+```typescript
+// Before
+verifyAction(expectedPrevSAI, prevSAI);
+
+// After
+verifyPrevSAI(expectedPrevSAI, prevSAI);
+
+// Or use full verification with schema
+await verifyAction(expectedPrevSAI, prevSAI, saeBytes, clientSAI, schema, privateKey);
+```
+
+### Notes
+- TypeScript implementation now fully matches Go SDK architecture
+- All changes maintain cross-language compatibility
+- Ed25519 signing requires Node.js 18+ or modern browsers with Web Crypto support
+- For broader compatibility, consider using `@noble/ed25519` library

@@ -77,3 +77,24 @@
 - `internal/SDTOFactory/{builder,consumer,constraint,constructor}/`
 - `vax-demo/` stub
 - Unused dependencies in `go.sum`
+
+-- 20260107 --
+### Added
+- **Sign type support in SDTO**
+  - `FieldSpec` now supports `Type: "sign"` for signature field validation
+  - `SchemaBuilder.SetActionSign()`: Set single signature algorithm type
+  - `SchemaBuilder.SetActionSignMulti()`: Set multiple allowed signature types
+  - `SupportedSignTypes` constant: `[]string{"ed25519", "rsa", "ecdsa"}`
+  - `validateSign()`: Validates signature field format and non-empty constraint
+
+### Documentation
+- **Cross-language architecture alignment**
+  - Go implementation serves as reference architecture for TypeScript SDK
+  - Shared design patterns: JCS canonicalization, SDTO validation, SAE structure
+  - Identical API signatures across languages for `ComputeSAI()`, `VerifyAction()`, `ValidateData()`
+  - Consistent error handling: `ErrInvalidInput`, `ErrInvalidPrevSAI`, `ErrSAIMismatch`
+
+### Notes
+- TypeScript SDK has been refactored to match Go architecture (see `ts/CHANGELOG.md`)
+- All core modules (`vax`, `jcs`, `sae`, `sdto`) maintain cross-language compatibility
+- Deterministic output guaranteed by JCS canonicalization across all implementations

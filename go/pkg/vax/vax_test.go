@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"testing"
 
+	"vax/pkg/vax/jcs"
 	"vax/pkg/vax/sae"
 	"vax/pkg/vax/sdto"
 )
@@ -121,6 +122,12 @@ func TestVerifyAction(t *testing.T) {
 	}
 	_ = pubKey // for verification later
 
+	// Helper to build SAE bytes
+	buildSAEBytes := func(s *sae.Envelope) []byte {
+		b, _ := jcs.Marshal(s)
+		return b
+	}
+
 	t.Run("valid action", func(t *testing.T) {
 		expectedPrevSAI := make([]byte, SAISize)
 		for i := range expectedPrevSAI {
@@ -130,7 +137,7 @@ func TestVerifyAction(t *testing.T) {
 		prevSAI := make([]byte, SAISize)
 		copy(prevSAI, expectedPrevSAI)
 
-		testSAE := &sae.SAE{
+		testSAE := &sae.Envelope{
 			ActionType: "transfer",
 			Timestamp:  1234567890,
 			SDTO: map[string]any{
@@ -139,15 +146,19 @@ func TestVerifyAction(t *testing.T) {
 			},
 			Signature: nil,
 		}
+		saeBytes := buildSAEBytes(testSAE)
 
-		err := VerifyAction(expectedPrevSAI, prevSAI, testSAE, schema, privKey)
+		// Client computes SAI
+		clientSAI, _ := ComputeSAI(prevSAI, saeBytes)
+
+		signedSAE, err := VerifyAction(expectedPrevSAI, prevSAI, saeBytes, clientSAI, schema, privKey)
 
 		if err != nil {
 			t.Errorf("VerifyAction failed: %v", err)
 		}
 
-		// Check that SAE was signed
-		if testSAE.Signature == nil {
+		// Check that returned SAE is signed
+		if signedSAE == nil || signedSAE.Signature == nil {
 			t.Error("SAE should be signed after VerifyAction")
 		}
 	})
@@ -163,7 +174,7 @@ func TestVerifyAction(t *testing.T) {
 			wrongPrevSAI[i] = 0xBB
 		}
 
-		testSAE := &sae.SAE{
+		testSAE := &sae.Envelope{
 			ActionType: "transfer",
 			Timestamp:  1234567890,
 			SDTO: map[string]any{
@@ -172,8 +183,10 @@ func TestVerifyAction(t *testing.T) {
 			},
 			Signature: nil,
 		}
+		saeBytes := buildSAEBytes(testSAE)
+		clientSAI, _ := ComputeSAI(wrongPrevSAI, saeBytes)
 
-		err := VerifyAction(expectedPrevSAI, wrongPrevSAI, testSAE, schema, privKey)
+		_, err := VerifyAction(expectedPrevSAI, wrongPrevSAI, saeBytes, clientSAI, schema, privKey)
 
 		if err != ErrInvalidPrevSAI {
 			t.Errorf("expected ErrInvalidPrevSAI, got %v", err)
@@ -183,7 +196,7 @@ func TestVerifyAction(t *testing.T) {
 	t.Run("invalid schema - missing field", func(t *testing.T) {
 		expectedPrevSAI := make([]byte, SAISize)
 
-		testSAE := &sae.SAE{
+		testSAE := &sae.Envelope{
 			ActionType: "transfer",
 			Timestamp:  1234567890,
 			SDTO: map[string]any{
@@ -192,8 +205,10 @@ func TestVerifyAction(t *testing.T) {
 			},
 			Signature: nil,
 		}
+		saeBytes := buildSAEBytes(testSAE)
+		clientSAI, _ := ComputeSAI(expectedPrevSAI, saeBytes)
 
-		err := VerifyAction(expectedPrevSAI, expectedPrevSAI, testSAE, schema, privKey)
+		_, err := VerifyAction(expectedPrevSAI, expectedPrevSAI, saeBytes, clientSAI, schema, privKey)
 
 		if err == nil {
 			t.Error("expected error for missing field")
@@ -203,7 +218,7 @@ func TestVerifyAction(t *testing.T) {
 	t.Run("invalid schema - value out of range", func(t *testing.T) {
 		expectedPrevSAI := make([]byte, SAISize)
 
-		testSAE := &sae.SAE{
+		testSAE := &sae.Envelope{
 			ActionType: "transfer",
 			Timestamp:  1234567890,
 			SDTO: map[string]any{
@@ -212,8 +227,10 @@ func TestVerifyAction(t *testing.T) {
 			},
 			Signature: nil,
 		}
+		saeBytes := buildSAEBytes(testSAE)
+		clientSAI, _ := ComputeSAI(expectedPrevSAI, saeBytes)
 
-		err := VerifyAction(expectedPrevSAI, expectedPrevSAI, testSAE, schema, privKey)
+		_, err := VerifyAction(expectedPrevSAI, expectedPrevSAI, saeBytes, clientSAI, schema, privKey)
 
 		if err == nil {
 			t.Error("expected error for value out of range")
@@ -223,7 +240,7 @@ func TestVerifyAction(t *testing.T) {
 	t.Run("error: already signed SAE", func(t *testing.T) {
 		expectedPrevSAI := make([]byte, SAISize)
 
-		testSAE := &sae.SAE{
+		testSAE := &sae.Envelope{
 			ActionType: "transfer",
 			Timestamp:  1234567890,
 			SDTO: map[string]any{
@@ -232,35 +249,86 @@ func TestVerifyAction(t *testing.T) {
 			},
 			Signature: []byte{0x01, 0x02}, // already signed
 		}
+		saeBytes := buildSAEBytes(testSAE)
+		clientSAI, _ := ComputeSAI(expectedPrevSAI, saeBytes)
 
-		err := VerifyAction(expectedPrevSAI, expectedPrevSAI, testSAE, schema, privKey)
+		_, err := VerifyAction(expectedPrevSAI, expectedPrevSAI, saeBytes, clientSAI, schema, privKey)
 
 		if err != ErrInvalidInput {
 			t.Errorf("expected ErrInvalidInput, got %v", err)
 		}
 	})
 
+	t.Run("error: SAI mismatch", func(t *testing.T) {
+		expectedPrevSAI := make([]byte, SAISize)
+
+		testSAE := &sae.Envelope{
+			ActionType: "transfer",
+			Timestamp:  1234567890,
+			SDTO: map[string]any{
+				"name":   "alice",
+				"amount": 500.0,
+			},
+			Signature: nil,
+		}
+		saeBytes := buildSAEBytes(testSAE)
+
+		// Wrong SAI
+		wrongSAI := make([]byte, SAISize)
+		for i := range wrongSAI {
+			wrongSAI[i] = 0xFF
+		}
+
+		_, err := VerifyAction(expectedPrevSAI, expectedPrevSAI, saeBytes, wrongSAI, schema, privKey)
+
+		if err != ErrSAIMismatch {
+			t.Errorf("expected ErrSAIMismatch, got %v", err)
+		}
+	})
+
 	t.Run("error: invalid expectedPrevSAI length", func(t *testing.T) {
-		testSAE := &sae.SAE{
+		testSAE := &sae.Envelope{
 			ActionType: "transfer",
 			Timestamp:  1234567890,
 			SDTO:       map[string]any{"name": "alice", "amount": 500.0},
 			Signature:  nil,
 		}
-		err := VerifyAction([]byte{0x01}, make([]byte, SAISize), testSAE, schema, privKey)
+		saeBytes := buildSAEBytes(testSAE)
+		clientSAI := make([]byte, SAISize)
+
+		_, err := VerifyAction([]byte{0x01}, make([]byte, SAISize), saeBytes, clientSAI, schema, privKey)
 		if err != ErrInvalidInput {
 			t.Errorf("expected ErrInvalidInput, got %v", err)
 		}
 	})
 
 	t.Run("error: invalid prevSAI length", func(t *testing.T) {
-		testSAE := &sae.SAE{
+		testSAE := &sae.Envelope{
 			ActionType: "transfer",
 			Timestamp:  1234567890,
 			SDTO:       map[string]any{"name": "alice", "amount": 500.0},
 			Signature:  nil,
 		}
-		err := VerifyAction(make([]byte, SAISize), []byte{0x01}, testSAE, schema, privKey)
+		saeBytes := buildSAEBytes(testSAE)
+		clientSAI := make([]byte, SAISize)
+
+		_, err := VerifyAction(make([]byte, SAISize), []byte{0x01}, saeBytes, clientSAI, schema, privKey)
+		if err != ErrInvalidInput {
+			t.Errorf("expected ErrInvalidInput, got %v", err)
+		}
+	})
+
+	t.Run("error: empty saeBytes", func(t *testing.T) {
+		clientSAI := make([]byte, SAISize)
+		_, err := VerifyAction(make([]byte, SAISize), make([]byte, SAISize), []byte{}, clientSAI, schema, privKey)
+		if err != ErrInvalidInput {
+			t.Errorf("expected ErrInvalidInput, got %v", err)
+		}
+	})
+
+	t.Run("error: invalid JSON", func(t *testing.T) {
+		clientSAI := make([]byte, SAISize)
+		_, err := VerifyAction(make([]byte, SAISize), make([]byte, SAISize), []byte("not json"), clientSAI, schema, privKey)
 		if err != ErrInvalidInput {
 			t.Errorf("expected ErrInvalidInput, got %v", err)
 		}
@@ -326,14 +394,17 @@ func BenchmarkVerifyAction(b *testing.B) {
 	schema := builder.BuildSchema()
 	_, privKey, _ := sae.GenerateKeyPair()
 
+	testSAE := &sae.Envelope{
+		ActionType: "transfer",
+		Timestamp:  1234567890,
+		SDTO:       map[string]any{"name": "alice", "amount": 500.0},
+		Signature:  nil,
+	}
+	saeBytes, _ := jcs.Marshal(testSAE)
+	clientSAI, _ := ComputeSAI(prevSAI, saeBytes)
+
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		testSAE := &sae.SAE{
-			ActionType: "transfer",
-			Timestamp:  1234567890,
-			SDTO:       map[string]any{"name": "alice", "amount": 500.0},
-			Signature:  nil,
-		}
-		_ = VerifyAction(prevSAI, prevSAI, testSAE, schema, privKey)
+		_, _ = VerifyAction(prevSAI, prevSAI, saeBytes, clientSAI, schema, privKey)
 	}
 }

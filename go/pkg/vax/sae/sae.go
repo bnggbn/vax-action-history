@@ -9,7 +9,7 @@ import (
 	"vax/pkg/vax/jcs"
 )
 
-type SAE struct {
+type Envelope struct {
 	ActionType string         `json:"action_type"`
 	Timestamp  int64          `json:"timestamp"`
 	SDTO       map[string]any `json:"sdto"`
@@ -18,7 +18,7 @@ type SAE struct {
 
 // BuildSAE builds a Semantic Action Envelope using the project's JCS canonicalizer.
 func BuildSAE(actionType string, sdto map[string]any) ([]byte, error) {
-	env := SAE{
+	env := Envelope{
 		ActionType: actionType,
 		Timestamp:  time.Now().UnixMilli(),
 		SDTO:       sdto,
@@ -35,7 +35,7 @@ func BuildSAE(actionType string, sdto map[string]any) ([]byte, error) {
 	return canonical, nil
 }
 
-func (sae *SAE) Sign(privateKey ed25519.PrivateKey) error {
+func (sae *Envelope) Sign(privateKey ed25519.PrivateKey) error {
 	if len(privateKey) != ed25519.PrivateKeySize {
 		return errors.New("invalid Ed25519 private key")
 	}

@@ -104,7 +104,7 @@ In distributed environments, VAX SDK instances MAY exist on multiple nodes.
 
 Each instance:
 - Produces actions for exactly one Actor
-- Maintains local counter and chain state
+- Maintains local chain state (prevSAI)
 - Emits actions referencing `prevSAI`
 
 The SDK makes no assumptions about:
@@ -148,15 +148,17 @@ SDTO (immutable)
     ↓
 SAE (canonical encoding)
     ↓
-prevSAI
+SAI = SHA256("VAX-SAI" || prevSAI || SHA256(SAE))
     ↓
-gi = random entropy (SDK-internal, single-use)
-    ↓
-SAI = HASH(prevSAI || SAE || gi)
-    ↓
-Action Envelope
+Action Envelope (SAE + SAI + prevSAI)
     ↓
 Backend: VERIFY prevSAI continuity (never modify)
+    ↓
+Backend: VERIFY SAI computation
+    ↓
+Backend: VERIFY SDTO against Schema
+    ↓
+Backend: SIGN SAE (action enters history)
     ↓
 COMMIT or REJECT
 ```
@@ -328,8 +330,9 @@ How conflicts are interpreted, prioritized, or resolved is explicitly
 - History is auditable
 
 **2. Replay Resistance**
-- Each action includes a single-use, SDK-internal entropy value (`gi`)
-- Replays fail due to `prevSAI` continuity
+- Replays fail due to `prevSAI` continuity check
+- Each action must reference the exact previous SAI
+- Reordering or replaying breaks the chain
 
 
 **3. Canonical Determinism**
@@ -346,17 +349,22 @@ How conflicts are interpreted, prioritized, or resolved is explicitly
 
 **1. Legal Non-Repudiation**
 
-VAX uses HMAC (symmetric), not signatures (asymmetric).
+VAX L0 uses hash chains for integrity, not cryptographic signatures.
 
-Why?
-- Simpler implementation
+Backend signatures (Ed25519) are added at verification time to mark
+"action entered history", but client signatures are optional and
+schema-dependent.
+
+Why this design?
+- Simpler L0 implementation
 - Faster verification
 - Adequate for most use cases
+- Signatures can be added when needed
 
-If legal non-repudiation is required:
-- Add optional signature layer
-- Use asymmetric keys
-- This is L1/L2 concern, not L0
+If legal non-repudiation from clients is required:
+- Schema can mandate client signatures via `sign` or `sign_multi` fields
+- Backend always signs to establish authority
+- This is L1 concern, not L0
 
 **2. Business Correctness**
 
@@ -389,7 +397,7 @@ Authorization must be enforced at:
 If an attacker controls:
 - The device
 - The SDK
-- The `K_chain`
+- The client's chain state (prevSAI)
 
 Then they can produce valid actions.
 
@@ -493,24 +501,25 @@ Both are **tools for integrity**, not coordination protocols.
 - Use device_id as part of Actor
 - Higher layer can merge Actor histories
 
-### Trade-off 2: HMAC Instead of Signatures
+### Trade-off 2: Backend-Only Signatures (Client Signatures Optional)
 
-**We chose:** HMAC (symmetric)
-**We gave up:** Legal non-repudiation
+**We chose:** Backend always signs, client signatures schema-dependent
+**We gave up:** Mandatory client signatures for all actions
 
 **Why?**
-- Simpler implementation
-- Faster verification
-- Adequate for 99% of cases
-- Signatures can be added at L1
+- Simpler client implementation
+- Flexibility: schema decides when client signature is needed
+- Backend signature establishes authority ("action entered history")
+- Adequate for most use cases
 
 **When this hurts:**
-- Legal disputes requiring proof
-- Multi-party contracts
+- Legal disputes requiring client non-repudiation
+- Multi-party contracts where all parties must sign
 
 **Mitigation:**
-- Optional signature layer
-- External notarization
+- Schema can mandate client signatures via `sign` or `sign_multi` fields
+- Backend always signs to establish authority
+- External notarization for legal requirements
 
 ### Trade-off 3: No Global Ordering
 
@@ -530,23 +539,26 @@ Both are **tools for integrity**, not coordination protocols.
 - Application-level causality tracking
 - External coordination layer
 
-### Trade-off 4: Counter as Metadata (Not Authority)
-**We chose:** Counter as non-authoritative metadata
-**We gave up:** Strict +1 counter and Flexible retry logic
+### Trade-off 4: No Additional Entropy in SAI
+
+**We chose:** SAI depends only on prevSAI and SAE
+**We gave up:** Per-action randomness (gi)
 
 **Why?**
-- Replay prevention is enforced by `prevSAI` continuity
-- Ordering is defined by `prevSAI`, not counters
-- Avoids false rejects on retries or drops
-- Prevents duplicated sequencing logic
+- Simpler implementation and verification
+- prevSAI chain provides replay protection
+- Deterministic: same inputs → same SAI
+- Easier to debug and reason about
+
 **When this hurts:**
-- Network failures during commit
-- Abnormal counter jumps may pass L0
+- SAI becomes predictable if SAE is known
+- No additional entropy layer
+
 **Mitigation:**
-- SDK-level retry with state sync
-- Counter doesn't advance on failure
-- Treat counter as L1 signal
-- Alert or analyze, not block
+- prevSAI chain prevents replay/reordering
+- Backend signatures add authority
+- TLS protects transport
+- Sufficient for most use cases
 
 ---
 
