@@ -1,9 +1,11 @@
 package vax
 
 import (
-	"crypto/rand"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"errors"
+	"vax/pkg/vax/sae"
+	"vax/pkg/vax/sdto"
 )
 
 // Error codes
@@ -19,18 +21,8 @@ var (
 // Constants
 const (
 	SAISize         = 32
-	GISize          = 32
 	GenesisSaltSize = 16
 )
-
-// ComputeGI = random 32 bytes
-func computeGI() ([]byte, error) {
-    gi := make([]byte, 32) // 256-bit
-    if _, err := rand.Read(gi); err != nil {
-        return nil, err
-    }
-    return gi, nil
-}
 
 // ComputeSAI computes SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE) || gi)
 func ComputeSAI(prevSAI, saeBytes []byte) ([]byte, error) {
@@ -44,18 +36,12 @@ func ComputeSAI(prevSAI, saeBytes []byte) ([]byte, error) {
 	// Two-stage hash
 	saeHash := sha256.Sum256(saeBytes)
 
-	gi, err := computeGI()
-	if err != nil {
-		return nil, err
-	}
-
 	// vax sai = 11
 	// message = "VAX-SAI" || prevSAI || saeHash || gi
-	message := make([]byte, 0, 7+SAISize+SAISize+GISize)
+	message := make([]byte, 0, 7+SAISize+SAISize)
 	message = append(message, "VAX-SAI"...)
 	message = append(message, prevSAI...)
 	message = append(message, saeHash[:]...)
-	message = append(message, gi...)
 
 	hash := sha256.Sum256(message)
 	return hash[:], nil
@@ -77,10 +63,13 @@ func ComputeGenesisSAI(actorID string, genesisSalt []byte) ([]byte, error) {
 	return hash[:], nil
 }
 
-// VerifyAction verifies an action submission (crypto only, no JSON validation)
+// VerifyAction verifies an action submission (crypto + schema validation)
 func VerifyAction(
 	expectedPrevSAI []byte,
 	prevSAI []byte,
+	sae *sae.SAE,
+	schema map[string]sdto.FieldSpec,
+	privateKey ed25519.PrivateKey,
 ) error {
 
 	if len(expectedPrevSAI) != SAISize {
@@ -89,13 +78,23 @@ func VerifyAction(
 	if len(prevSAI) != SAISize {
 		return ErrInvalidInput
 	}
+	// Check that SAE is unsigned because sign sae just for records that service provider can't massaging the action
+	if sae.Signature != nil {
+		return ErrInvalidInput
+	}
 
 	// Verify prevSAI matches
 	if !bytesEqual(prevSAI, expectedPrevSAI) {
 		return ErrInvalidPrevSAI
 	}
 
-	return nil
+	// Verify SDTO against schema
+	if err := sdto.ValidateData(sae.SDTO, schema); err != nil {
+		return err
+	}
+
+	// all good and sign SAE settle down the history at here
+	return sae.Sign(privateKey)
 }
 
 func bytesEqual(a, b []byte) bool {

@@ -48,9 +48,26 @@ func validateValue(value any, c FieldSpec) error {
 		return validateString(value, c)
 	case "number":
 		return validateNumber(value, c)
+	case "sign":
+		return validateSign(value, c)
 	default:
 		return fmt.Errorf("unknown type %q", c.Type)
 	}
+}
+
+func validateSign(value any, c FieldSpec) error {
+	// 簽名值只能是 string（類型已在 schema 層定義）
+	v, ok := value.(string)
+	if !ok {
+		return errors.New("sign field expects string value")
+	}
+
+	// 可擴展：根據 c.Enum[0] 做格式驗證（hex/base64 等）
+	if len(v) == 0 {
+		return errors.New("sign value cannot be empty")
+	}
+
+	return nil
 }
 
 func validateString(value any, c FieldSpec) error {
@@ -136,9 +153,45 @@ func compareNumber(value float64, bound string, op string) bool {
 
 // Finalize 最終產出 SAE
 func (f *FluentAction) Finalize() ([]byte, error) {
+	// Check for missing required fields (all schema fields are required)
+	for key := range f.schema {
+		if _, exists := f.data[key]; !exists {
+			f.errs = append(f.errs, fmt.Errorf("missing required field: %s", key))
+		}
+	}
+
 	if len(f.errs) > 0 {
 		return nil, errors.Join(f.errs...)
 	}
 	// 調用你剛剛寫好的 SAE.BuildSAE
 	return sae.BuildSAE(f.actionType, f.data)
+}
+
+// ValidateData validates a map against schema (for server-side verification)
+func ValidateData(data map[string]any, schema map[string]FieldSpec) error {
+	var errs []error
+
+	// Check all required fields in schema exist
+	for key, spec := range schema {
+		value, exists := data[key]
+		if !exists {
+			errs = append(errs, fmt.Errorf("missing field: %s", key))
+			continue
+		}
+		if err := validateValue(value, spec); err != nil {
+			errs = append(errs, fmt.Errorf("field %s: %w", key, err))
+		}
+	}
+
+	// Check no extra fields
+	for key := range data {
+		if _, exists := schema[key]; !exists {
+			errs = append(errs, fmt.Errorf("unknown field: %s", key))
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
 }

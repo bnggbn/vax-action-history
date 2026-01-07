@@ -6,6 +6,9 @@ import (
 	"bytes"
 	"encoding/hex"
 	"testing"
+
+	"vax/pkg/vax/sae"
+	"vax/pkg/vax/sdto"
 )
 
 // Test vectors (matching C test suite)
@@ -15,40 +18,6 @@ var (
 		0xa9, 0xaa, 0xab, 0xac, 0xad, 0xae, 0xaf, 0xb0,
 	}
 )
-
-func TestComputeGI(t *testing.T) {
-	t.Run("basic", func(t *testing.T) {
-		gi, err := computeGI()
-		if err != nil {
-			t.Fatalf("computeGI failed: %v", err)
-		}
-
-		if len(gi) != GISize {
-			t.Errorf("gi length = %d, want %d", len(gi), GISize)
-		}
-
-		t.Logf("gi: %x", gi)
-	})
-
-	t.Run("randomness", func(t *testing.T) {
-		gi1, _ := computeGI()
-		gi2, _ := computeGI()
-
-		// Random values should be different (extremely high probability)
-		if bytes.Equal(gi1, gi2) {
-			t.Error("computeGI produced same output twice (should be random)")
-		}
-	})
-
-	t.Run("non-zero", func(t *testing.T) {
-		gi, _ := computeGI()
-		zeros := make([]byte, GISize)
-
-		if bytes.Equal(gi, zeros) {
-			t.Error("computeGI produced all zeros")
-		}
-	})
-}
 
 func TestComputeGenesisSAI(t *testing.T) {
 	t.Run("basic", func(t *testing.T) {
@@ -110,16 +79,16 @@ func TestComputeSAI(t *testing.T) {
 		t.Logf("SAI: %x", sai)
 	})
 
-	t.Run("randomness due to gi", func(t *testing.T) {
+	t.Run("deterministic", func(t *testing.T) {
 		prevSAI := make([]byte, SAISize)
-		sae := []byte(`{"test":1}`)
+		saeData := []byte(`{"test":1}`)
 
-		// Since gi is random, same inputs produce different outputs
-		sai1, _ := ComputeSAI(prevSAI, sae)
-		sai2, _ := ComputeSAI(prevSAI, sae)
+		// Same inputs should produce same output
+		sai1, _ := ComputeSAI(prevSAI, saeData)
+		sai2, _ := ComputeSAI(prevSAI, saeData)
 
-		if bytes.Equal(sai1, sai2) {
-			t.Error("ComputeSAI produced same output (gi should be random)")
+		if !bytes.Equal(sai1, sai2) {
+			t.Error("ComputeSAI should be deterministic")
 		}
 	})
 
@@ -139,6 +108,19 @@ func TestComputeSAI(t *testing.T) {
 }
 
 func TestVerifyAction(t *testing.T) {
+	// Setup schema
+	builder := sdto.NewSchemaBuilder()
+	builder.SetActionStringLength("name", "1", "50")
+	builder.SetActionNumberRange("amount", "0", "1000")
+	schema := builder.BuildSchema()
+
+	// Generate key pair for signing
+	pubKey, privKey, err := sae.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair failed: %v", err)
+	}
+	_ = pubKey // for verification later
+
 	t.Run("valid action", func(t *testing.T) {
 		expectedPrevSAI := make([]byte, SAISize)
 		for i := range expectedPrevSAI {
@@ -148,11 +130,25 @@ func TestVerifyAction(t *testing.T) {
 		prevSAI := make([]byte, SAISize)
 		copy(prevSAI, expectedPrevSAI)
 
-		// Verify
-		err := VerifyAction(expectedPrevSAI, prevSAI)
+		testSAE := &sae.SAE{
+			ActionType: "transfer",
+			Timestamp:  1234567890,
+			SDTO: map[string]any{
+				"name":   "alice",
+				"amount": 500.0,
+			},
+			Signature: nil,
+		}
+
+		err := VerifyAction(expectedPrevSAI, prevSAI, testSAE, schema, privKey)
 
 		if err != nil {
 			t.Errorf("VerifyAction failed: %v", err)
+		}
+
+		// Check that SAE was signed
+		if testSAE.Signature == nil {
+			t.Error("SAE should be signed after VerifyAction")
 		}
 	})
 
@@ -167,22 +163,104 @@ func TestVerifyAction(t *testing.T) {
 			wrongPrevSAI[i] = 0xBB
 		}
 
-		err := VerifyAction(expectedPrevSAI, wrongPrevSAI)
+		testSAE := &sae.SAE{
+			ActionType: "transfer",
+			Timestamp:  1234567890,
+			SDTO: map[string]any{
+				"name":   "alice",
+				"amount": 500.0,
+			},
+			Signature: nil,
+		}
+
+		err := VerifyAction(expectedPrevSAI, wrongPrevSAI, testSAE, schema, privKey)
 
 		if err != ErrInvalidPrevSAI {
 			t.Errorf("expected ErrInvalidPrevSAI, got %v", err)
 		}
 	})
 
+	t.Run("invalid schema - missing field", func(t *testing.T) {
+		expectedPrevSAI := make([]byte, SAISize)
+
+		testSAE := &sae.SAE{
+			ActionType: "transfer",
+			Timestamp:  1234567890,
+			SDTO: map[string]any{
+				"name": "alice",
+				// missing "amount"
+			},
+			Signature: nil,
+		}
+
+		err := VerifyAction(expectedPrevSAI, expectedPrevSAI, testSAE, schema, privKey)
+
+		if err == nil {
+			t.Error("expected error for missing field")
+		}
+	})
+
+	t.Run("invalid schema - value out of range", func(t *testing.T) {
+		expectedPrevSAI := make([]byte, SAISize)
+
+		testSAE := &sae.SAE{
+			ActionType: "transfer",
+			Timestamp:  1234567890,
+			SDTO: map[string]any{
+				"name":   "alice",
+				"amount": 9999.0, // > max 1000
+			},
+			Signature: nil,
+		}
+
+		err := VerifyAction(expectedPrevSAI, expectedPrevSAI, testSAE, schema, privKey)
+
+		if err == nil {
+			t.Error("expected error for value out of range")
+		}
+	})
+
+	t.Run("error: already signed SAE", func(t *testing.T) {
+		expectedPrevSAI := make([]byte, SAISize)
+
+		testSAE := &sae.SAE{
+			ActionType: "transfer",
+			Timestamp:  1234567890,
+			SDTO: map[string]any{
+				"name":   "alice",
+				"amount": 500.0,
+			},
+			Signature: []byte{0x01, 0x02}, // already signed
+		}
+
+		err := VerifyAction(expectedPrevSAI, expectedPrevSAI, testSAE, schema, privKey)
+
+		if err != ErrInvalidInput {
+			t.Errorf("expected ErrInvalidInput, got %v", err)
+		}
+	})
+
 	t.Run("error: invalid expectedPrevSAI length", func(t *testing.T) {
-		err := VerifyAction([]byte{0x01}, make([]byte, SAISize))
+		testSAE := &sae.SAE{
+			ActionType: "transfer",
+			Timestamp:  1234567890,
+			SDTO:       map[string]any{"name": "alice", "amount": 500.0},
+			Signature:  nil,
+		}
+		err := VerifyAction([]byte{0x01}, make([]byte, SAISize), testSAE, schema, privKey)
 		if err != ErrInvalidInput {
 			t.Errorf("expected ErrInvalidInput, got %v", err)
 		}
 	})
 
 	t.Run("error: invalid prevSAI length", func(t *testing.T) {
-		err := VerifyAction(make([]byte, SAISize), []byte{0x01})
+		testSAE := &sae.SAE{
+			ActionType: "transfer",
+			Timestamp:  1234567890,
+			SDTO:       map[string]any{"name": "alice", "amount": 500.0},
+			Signature:  nil,
+		}
+		err := VerifyAction(make([]byte, SAISize), []byte{0x01}, testSAE, schema, privKey)
 		if err != ErrInvalidInput {
 			t.Errorf("expected ErrInvalidInput, got %v", err)
 		}
@@ -230,13 +308,6 @@ func TestChainSimulation(t *testing.T) {
 }
 
 // Benchmark tests
-func BenchmarkComputeGI(b *testing.B) {
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = computeGI()
-	}
-}
-
 func BenchmarkComputeSAI(b *testing.B) {
 	prevSAI := make([]byte, SAISize)
 	sae := []byte(`{"action":"test","value":42}`)
@@ -249,9 +320,20 @@ func BenchmarkComputeSAI(b *testing.B) {
 
 func BenchmarkVerifyAction(b *testing.B) {
 	prevSAI := make([]byte, SAISize)
+	builder := sdto.NewSchemaBuilder()
+	builder.SetActionStringLength("name", "1", "50")
+	builder.SetActionNumberRange("amount", "0", "1000")
+	schema := builder.BuildSchema()
+	_, privKey, _ := sae.GenerateKeyPair()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = VerifyAction(prevSAI, prevSAI)
+		testSAE := &sae.SAE{
+			ActionType: "transfer",
+			Timestamp:  1234567890,
+			SDTO:       map[string]any{"name": "alice", "amount": 500.0},
+			Signature:  nil,
+		}
+		_ = VerifyAction(prevSAI, prevSAI, testSAE, schema, privKey)
 	}
 }
