@@ -1,249 +1,465 @@
 # VAX Go SDK
 
-Zero-dependency tamper-evident action history.
+Pure Go implementation of VAX cryptographic primitives.
+
+Zero dependencies. Deterministic output.
+
+---
 
 ## Installation
+
 ```bash
-go get github.com/bbggbn/vax-action-history/go/pkg/vax
+go get github.com/bnggbn/vax-action-history/go/pkg/vax
 ```
 
-## Usage Flow
+---
 
-### 1. Provider: Define Schema
+## Philosophy
+
+VAX provides **primitives**, not a complete system.
+
+**You control:**
+- Storage structure
+- Whether to add signatures
+- Authorization logic
+- Transport protocol
+
+**VAX provides:**
+- SAI chain computation
+- JCS canonicalization
+- Schema validation
+
+---
+
+## Quick Start
+
+```go
+package main
+
+import (
+    "fmt"
+    "vax/pkg/vax"
+)
+
+func main() {
+    // 1. Genesis
+    actorID := "user123:device456"
+    genesisSalt := vax.GenerateGenesisSalt()
+    genesisSAI, _ := vax.ComputeGenesisSAI(actorID, genesisSalt)
+
+    // 2. Build action
+    saeBytes := buildAction("transfer", data)
+
+    // 3. Compute SAI
+    sai, _ := vax.ComputeSAI(genesisSAI, saeBytes)
+
+    // 4. Store (your structure)
+    store(sai, saeBytes, genesisSAI)
+}
+```
+
+---
+
+## Core API
+
+### Genesis
+
+```go
+func ComputeGenesisSAI(actorID string, genesisSalt []byte) ([]byte, error)
+```
+
+Compute genesis SAI for an Actor.
+
+**Formula:**
+```
+SAI_0 = SHA256("VAX-GENESIS" || actorID || genesisSalt)
+```
+
+**Example:**
+```go
+actorID := "user123:device456"
+salt := vax.GenerateGenesisSalt()  // 16 random bytes
+sai, err := vax.ComputeGenesisSAI(actorID, salt)
+```
+
+---
+
+### Chain
+
+```go
+func ComputeSAI(prevSAI, saeBytes []byte) ([]byte, error)
+```
+
+Compute SAI for an action.
+
+**Formula:**
+```
+SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE))
+```
+
+**Example:**
+```go
+sae := buildSAE("transfer", data)
+sai, err := vax.ComputeSAI(prevSAI, sae)
+```
+
+---
+
+### Verification
+
+```go
+func VerifyChain(expectedPrevSAI, saeBytes, clientSAI []byte) error
+```
+
+Verify SAI chain integrity.
+
+**Checks:**
+1. prevSAI continuity
+2. SAI computation correctness
+
+**Example:**
+```go
+err := vax.VerifyChain(expectedPrevSAI, saeBytes, clientSAI)
+if err != nil {
+    // Chain broken or SAI mismatch
+}
+```
+
+---
+
+## Schema-Driven Validation (SDTO)
+
+### Define Schema
+
 ```go
 import "vax/pkg/vax/sdto"
 
-// Define action constraints
 schema := sdto.NewSchemaBuilder().
     SetActionStringLength("username", "3", "20").
     SetActionNumberRange("amount", "0", "1000000").
     SetActionEnum("currency", []string{"USD", "EUR", "TWD"}).
     BuildSchema()
-
-// Export as JSON for API transport
-schemaJSON := schema  // map[string]any
 ```
 
-### 2. Transport Schema
-Share schema via API/config:
-```json
-{
-  "username": {"type": "string", "min": "3", "max": "20"},
-  "amount": {"type": "number", "min": "0", "max": "1000000"},
-  "currency": {"type": "string", "enum": ["USD", "EUR", "TWD"]}
+### Build Validated Action
+
+```go
+saeBytes, err := sdto.NewAction("transfer", schema).
+    Set("username", "alice").
+    Set("amount", 500.0).
+    Set("currency", "USD").
+    Finalize()  // Returns canonical JSON bytes
+```
+
+**Validation happens at `.Set()` time.** Errors collected and returned at `.Finalize()`.
+
+### Server-Side Validation
+
+```go
+// Backend validates SDTO against schema
+err := sdto.ValidateData(action.SDTO, schema)
+if err != nil {
+    // Schema violation
 }
 ```
 
-### 3. Consumer: Build Validated Actions
+---
+
+## JCS (JSON Canonicalization)
+
+```go
+import "vax/pkg/vax/jcs"
+
+// Marshal to canonical JSON
+canonical := jcs.Marshal(obj)
+
+// Always produces identical output
+obj1 := map[string]any{"b": 2, "a": 1}
+obj2 := map[string]any{"a": 1, "b": 2}
+
+bytes1 := jcs.Marshal(obj1)  // {"a":1,"b":2}
+bytes2 := jcs.Marshal(obj2)  // {"a":1,"b":2}
+// bytes1 == bytes2 ✅
+```
+
+**Never use `json.Marshal()` for SAE. Always use `jcs.Marshal()`.**
+
+---
+
+## SAE (Semantic Action Envelope)
+
+```go
+import "vax/pkg/vax/sae"
+
+saeBytes := sae.BuildSAE("transfer", map[string]any{
+    "username": "alice",
+    "amount":   500.0,
+    "currency": "USD",
+})
+
+// Returns canonical JSON:
+// {"action_type":"transfer","sdto":{...},"timestamp":1704672000000}
+```
+
+**Structure:**
+```go
+type Envelope struct {
+    ActionType string         `json:"action_type"`
+    Timestamp  int64          `json:"timestamp"`
+    SDTO       map[string]any `json:"sdto"`
+}
+```
+
+**No signature field.** If you need signatures, add them yourself.
+
+---
+
+## Complete Workflow
+
+### Client Side
+
 ```go
 import (
+    "vax/pkg/vax"
     "vax/pkg/vax/sdto"
-    "vax/pkg/vax/sae"
 )
 
-// Parse received schema
-schema := sdto.ParseSchema(schemaJSON)
+// 1. Get schema from backend
+schema := backend.GetSchema("transfer")
 
-// Build action with validation
+// 2. Build validated action
 saeBytes, err := sdto.NewAction("transfer", schema).
     Set("username", "alice").
     Set("amount", 500.0).
     Set("currency", "USD").
     Finalize()
-// Returns canonical SAE bytes (unsigned)
-```
 
-### 4. Client: Compute SAI
-```go
-import (
-    "vax/pkg/vax"
-    "crypto/rand"
-)
-
-// First action: Compute genesis SAI
-actorID := "user123:device456"
-genesisSalt := make([]byte, 16)
-rand.Read(genesisSalt)
-
-genesisSAI, err := vax.ComputeGenesisSAI(actorID, genesisSalt)
-if err != nil {
-    // handle error
-}
-
-// For subsequent actions: Compute SAI from previous
-prevSAI := genesisSAI  // or lastSAI from storage
+// 3. Compute SAI
+prevSAI := getLastSAI()
 sai, err := vax.ComputeSAI(prevSAI, saeBytes)
+
+// 4. Submit to backend
+backend.Submit(Request{
+    SAI:     sai,
+    SAE:     saeBytes,
+    PrevSAI: prevSAI,
+})
+```
+
+### Backend Side
+
+```go
+// 1. Verify chain
+err := vax.VerifyChain(expectedPrevSAI, req.SAE, req.SAI)
 if err != nil {
-    // handle error
+    return err
 }
 
-// Submit to backend: {sai, saeBytes, prevSAI}
-```
-
-### 5. Backend: Verify and Sign
-```go
-import (
-    "vax/pkg/vax"
-    "crypto/ed25519"
-)
-
-// Backend receives: {expectedPrevSAI, prevSAI, saeBytes, clientSAI}
-// Backend has: schema, Ed25519 privateKey
-
-signedEnvelope, err := vax.VerifyAction(
-    expectedPrevSAI,  // What backend expects
-    prevSAI,          // What client claims
-    saeBytes,         // Client's SAE
-    clientSAI,        // Client's computed SAI
-    schema,           // Backend's schema
-    privateKey,       // Backend's signing key
-)
-
+// 2. Validate schema
+var env sae.Envelope
+json.Unmarshal(req.SAE, &env)
+err = sdto.ValidateData(env.SDTO, schema)
 if err != nil {
-    // Verification failed: reject action
-    // Possible errors:
-    // - ErrInvalidPrevSAI: Chain broken
-    // - ErrSAIMismatch: SAI computation wrong
-    // - Schema validation failed
+    return err
 }
 
-// Success: signedEnvelope contains backend signature
-// Store: {sai, signedEnvelope, timestamp}
-// Update state: prevSAI = sai
-```
+// 3. Optional: Add signature
+signature := ed25519.Sign(privateKey, req.SAE)
 
-## Pipeline Summary
-```
-Provider Side:
-  SchemaBuilder → JSON Schema → Transport to Consumer
-
-Consumer Side:
-  Schema → FluentAction.Set() → Finalize() → SAE (unsigned)
-                                               ↓
-  actorID + genesisSalt → ComputeGenesisSAI → SAI_0 (first action)
-                                               ↓
-  prevSAI + SAE ──────────→ ComputeSAI ─────→ SAI_n (subsequent actions)
-                                               ↓
-                                        Submit to Backend
-
-Backend Side:
-  Verify prevSAI continuity
-      ↓
-  Verify SAI = SHA256("VAX-SAI" || prevSAI || SHA256(SAE))
-      ↓
-  Verify SDTO against Schema
-      ↓
-  Sign SAE with Ed25519 (action enters history)
-      ↓
-  Store and update prevSAI
-```
-
-## Core Formulas
-
-```go
-// Genesis (first action for an Actor)
-SAI_0 = SHA256("VAX-GENESIS" || actorID || genesisSalt)
-
-// Subsequent actions
-SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE))
-
-// Where:
-// - actorID: "user_id:device_id"
-// - genesisSalt: 16 random bytes, persistent per Actor
-// - prevSAI: previous action's SAI (or SAI_0 for first action)
-// - SAE: Semantic Action Encoding (canonical JSON)
-```
-
-## Key Principles
-
-### Client-Side
-- Always use `jcs.Marshal()`, never `json.Marshal()`
-- Validation happens at `.Set()` time, errors collected at `.Finalize()`
-- SAI chain: each action references `prevSAI`
-- Client computes SAI before submitting to backend
-
-### Backend-Side
-- Backend **verifies** SAI, never computes it
-- Backend **signs** SAE to mark "action entered history"
-- Schema is backend's authority: frontend changes don't affect backend
-- Backend never repairs or modifies client data (IRP principle)
-
-### Security Properties
-- **Append-only**: prevSAI chain prevents reordering
-- **Tamper-evident**: SAI changes if SAE changes
-- **Backend authority**: Backend signature = official record
-- **Schema enforcement**: Both sides validate, backend is source of truth
-
-## Testing
-```bash
-go test ./pkg/vax/...
-```
-
-## API Reference
-
-### Core Functions
-
-```go
-// Compute genesis SAI for an Actor
-func ComputeGenesisSAI(actorID string, genesisSalt []byte) ([]byte, error)
-
-// Compute SAI for an action
-func ComputeSAI(prevSAI, saeBytes []byte) ([]byte, error)
-
-// Backend verification: verify and sign action
-func VerifyAction(
-    expectedPrevSAI []byte,
-    prevSAI []byte,
-    saeBytes []byte,
-    clientProvidedSAI []byte,
-    schema map[string]sdto.FieldSpec,
-    privateKey ed25519.PrivateKey,
-) (*sae.Envelope, error)
-```
-
-### Schema Builder
-
-```go
-// Create schema
-builder := sdto.NewSchemaBuilder()
-builder.SetActionStringLength("field", "min", "max")
-builder.SetActionNumberRange("field", "min", "max")
-builder.SetActionEnum("field", []string{"val1", "val2"})
-builder.SetActionSign("field", "ed25519")        // Require client signature
-builder.SetActionSignMulti("field", []string{"ed25519", "rsa"})
-schema := builder.BuildSchema()
-
-// Build action from schema
-saeBytes, err := sdto.NewAction("actionType", schema).
-    Set("field1", value1).
-    Set("field2", value2).
-    Finalize()
-```
-
-## Error Codes
-
-```go
-var (
-    ErrInvalidCounter  = errors.New("invalid counter")     // Reserved
-    ErrInvalidPrevSAI  = errors.New("invalid prevSAI")     // Chain broken
-    ErrSAIMismatch     = errors.New("SAI mismatch")        // SAI verification failed
-    ErrOutOfMemory     = errors.New("out of memory")       // Memory allocation failed
-    ErrInvalidInput    = errors.New("invalid input")       // Invalid parameters
-    ErrCounterOverflow = errors.New("counter overflow")    // Reserved
-)
-```
-
-## Docs
-- [Changelog](doct/changelog.md)
-- [L0 Specification](../docs/SPECIFICATION.md)
-- [Architecture & Design Philosophy](../docs/ARCHITECTURE.md)
-
-
-## License
-MIT
-
-## Contributing
-See [CONTRIBUTING.md](CONTRIBUTING.md)
+// 4. Store (your structure)
+db.Store(ActionRecord{
+    SAI:       req.SAI,
+    SAE:       req.SAE,
+    PrevSAI:   req.PrevSAI,
+    Signature: signature,  // optional
+    Timestamp: time.Now(),
+})
 ```
 
 ---
+
+## Optional: Signatures
+
+VAX doesn't handle signatures. Use Go standard library:
+
+```go
+import "crypto/ed25519"
+
+// Generate key pair
+publicKey, privateKey, _ := ed25519.GenerateKey(nil)
+
+// Sign SAE
+signature := ed25519.Sign(privateKey, saeBytes)
+
+// Verify
+valid := ed25519.Verify(publicKey, saeBytes, signature)
+```
+
+**Storage is your choice:**
+
+```go
+// Option A: Separate field
+type ActionRecord struct {
+    SAI       []byte
+    SAE       []byte
+    PrevSAI   []byte
+    Signature []byte  // Independent
+}
+
+// Option B: Wrap in metadata
+type ActionWithMeta struct {
+    Action struct {
+        SAI     []byte
+        SAE     []byte
+        PrevSAI []byte
+    }
+    Metadata struct {
+        Signature []byte
+        Timestamp time.Time
+        Author    string
+    }
+}
+
+// Your choice!
+```
+
+---
+
+## Helpers
+
+```go
+// Generate random genesis salt
+salt := vax.GenerateGenesisSalt()  // 16 bytes
+
+// Hex encoding
+hex := vax.ToHex(sai)
+sai, err := vax.FromHex(hex)
+
+// Constants
+vax.SAI_SIZE           // 32
+vax.GENESIS_SALT_SIZE  // 16
+```
+
+---
+
+## Error Handling
+
+```go
+var (
+    ErrInvalidInput    = errors.New("invalid input")
+    ErrInvalidPrevSAI  = errors.New("invalid prevSAI")
+    ErrSAIMismatch     = errors.New("SAI mismatch")
+    ErrCounterOverflow = errors.New("counter overflow")  // Reserved
+)
+```
+
+---
+
+## Testing
+
+```bash
+go test ./pkg/vax/...
+go test ./pkg/vax/... -v
+go test ./pkg/vax/... -cover
+```
+
+---
+
+## Examples
+
+See [examples/](examples/) for complete workflows:
+
+- **[minimal](examples/minimal/)** - Simplest usage, no signatures
+- **[with-signature](examples/with-signature/)** - Add backend signature
+- **[multi-actor](examples/multi-actor/)** - Multiple actors
+- **[verification](examples/verification/)** - Audit and verification
+
+---
+
+## Key Principles
+
+### 1. Always use JCS
+
+```go
+// ✅ Correct
+import "vax/pkg/vax/jcs"
+bytes := jcs.Marshal(obj)
+
+// ❌ Wrong
+bytes, _ := json.Marshal(obj)
+```
+
+### 2. Validate early
+
+```go
+// Validation at .Set() time
+action := sdto.NewAction("transfer", schema).
+    Set("amount", -100)  // ❌ Fails immediately
+
+// Errors collected at .Finalize()
+saeBytes, err := action.Finalize()
+```
+
+### 3. Backend verifies, never repairs
+
+```go
+// ✅ Backend verifies
+err := vax.VerifyChain(...)
+err = sdto.ValidateData(...)
+
+// ❌ Backend never "fixes" client data
+// Don't do: data["amount"] = abs(data["amount"])
+```
+
+---
+
+## Performance
+
+Pure Go implementation with no dependencies:
+
+```
+BenchmarkComputeSAI-8           50000    24.3 µs/op
+BenchmarkComputeGenesisSAI-8   100000    12.1 µs/op
+BenchmarkJCSMarshal-8          200000     8.5 µs/op
+```
+
+---
+
+## Cross-Language Compatibility
+
+All implementations produce identical output:
+
+```bash
+# Test vector
+actorID: "user123:device456"
+genesisSalt: a1a2a3a4a5a6a7a8a9aaabacadaeafb0
+
+# Expected
+genesisSAI: afc50728cd79e805a8ae06875a1ddf78ca11b0d56ec300b160fb71f50ce658c3
+
+# Verify
+go test ./pkg/vax -v -run TestGenesisSAI
+```
+
+---
+
+## Documentation
+
+- [Architecture](../docs/ARCHITECTURE.md)
+- [L0 Specification](../docs/SPECIFICATION.md)
+- [Changelog](doct/changelog.md)
+
+---
+
+## License
+
+MIT License
+
+---
+
+## Philosophy
+
+> VAX is a tool, not a system.
+>
+> We provide primitives.
+> You decide how to use them.

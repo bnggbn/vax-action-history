@@ -1,7 +1,6 @@
 package vax
 
 import (
-	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -72,7 +71,6 @@ func VerifyAction(
 	saeBytes []byte,
 	clientProvidedSAI []byte,
 	schema map[string]sdto.FieldSpec,
-	privateKey ed25519.PrivateKey,
 ) (*sae.Envelope, error) {
 
 	// Input validation
@@ -89,11 +87,6 @@ func VerifyAction(
 	// Parse SAE from bytes
 	var s sae.Envelope
 	if err := json.Unmarshal(saeBytes, &s); err != nil {
-		return nil, ErrInvalidInput
-	}
-
-	// Check that SAE is unsigned because sign sae just for records that service provider can't massaging the action
-	if s.Signature != nil {
 		return nil, ErrInvalidInput
 	}
 
@@ -118,11 +111,6 @@ func VerifyAction(
 	}
 	if !bytesEqual(computedSAI, clientProvidedSAI) {
 		return nil, ErrSAIMismatch
-	}
-
-	// all good and sign SAE settle down the history at here
-	if err := s.Sign(privateKey); err != nil {
-		return nil, err
 	}
 	return &s, nil
 }

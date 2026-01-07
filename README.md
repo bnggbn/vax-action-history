@@ -2,132 +2,228 @@
 
 **VAX records actions the way Git records code.**
 
-Local-first, incrementally adoptable, no blockchain required.
+A minimal toolkit for tamper-evident action logs. Local-first, incrementally adoptable.
 
 ---
 
 ## What is VAX?
 
-VAX provides tools for building deterministic, tamper-evident action logs.
+VAX provides **cryptographic primitives** for building deterministic, tamper-evident action logs.
 
 Like Git ensures code history integrity, VAX ensures action history integrity.
 
-**Key properties:**
-- Each action gets a deterministic hash
-- Actions form an append-only chain
-- History is verifiable without trusting producers
-- No global consensus required
+**Core primitives:**
+- **SAI Chain**: Merkle-like hash chain for tamper detection
+- **JCS**: Canonical JSON encoding for deterministic output
+- **SDTO**: Schema-driven validation for semantic correctness
+
+**What VAX is NOT:**
+- ❌ Not a complete system
+- ❌ Not a database
+- ❌ Not a network protocol
+- ❌ Not an authorization framework
+
+VAX is a **tool**. You decide how to use it.
+
+---
+
+## Philosophy: Tool, Not System
+
+```
+Git doesn't force:
+  - Where to store repos
+  - How to sign commits
+  - Which workflow to use
+
+VAX doesn't force:
+  - Where to store actions
+  - Whether to add signatures
+  - Which transport protocol to use
+```
+
+**You control:**
+- Storage structure
+- Signature mechanism (if needed)
+- Authorization logic
+- Business rules
+
+**VAX provides:**
+- Tamper-evident hash chain
+- Deterministic encoding
+- Schema validation
 
 ---
 
 ## Use Cases
 
 VAX is designed for domains where **accountability matters**:
+
 - Financial transactions
 - Audit trails
 - Risk decisions
 - Irreversible actions
+- Multi-party workflows
 
 ---
 
 ## Quick Start
 
-### Go (Recommended)
+### Installation
 
 ```bash
+# Go
 go get github.com/bnggbn/vax-action-history/go/pkg/vax
+
+# TypeScript
+npm install vax
+
+# C
+See c/BUILD.md
 ```
+
+### Basic Usage
 
 ```go
-package main
+import "vax/pkg/vax"
 
-import (
-    "fmt"
-    "crypto/rand"
-    "vax/pkg/vax"
-)
+// 1. Compute genesis SAI
+actorID := "user123:device456"
+genesisSalt := vax.GenerateGenesisSalt()
+genesisSAI, _ := vax.ComputeGenesisSAI(actorID, genesisSalt)
 
-func main() {
-    // Compute genesis SAI
-    actorID := "user123:device456"
-    genesisSalt := make([]byte, 16)
-    rand.Read(genesisSalt)
+// 2. Build action
+saeBytes := buildSAE("transfer", data)
 
-    sai, _ := vax.ComputeGenesisSAI(actorID, genesisSalt)
-    fmt.Printf("Genesis SAI: %x\n", sai)
+// 3. Compute SAI
+sai, _ := vax.ComputeSAI(prevSAI, saeBytes)
+
+// 4. Verify chain (backend)
+err := vax.VerifyChain(expectedPrevSAI, saeBytes, clientSAI)
+if err != nil {
+    // Chain broken or SAI mismatch
 }
+
+// 5. Store (you decide the structure)
+db.Store(ActionRecord{
+    SAI:     sai,
+    SAE:     saeBytes,
+    PrevSAI: prevSAI,
+    // Add whatever else you need
+})
 ```
-
-### TypeScript
-
-```bash
-npm install vax
-```
-
-```typescript
-import { canonicalize } from 'vax/jcs';
-
-const sae = canonicalize({ action: "test", amount: 100 });
-console.log(sae); // {"action":"test","amount":100}
-```
-
-### C (Reference Implementation)
-
-```bash
-cd c
-cmake -B build -G Ninja
-cmake --build build
-```
-
-See [C Build Instructions](c/BUILD.md) for details.
 
 ---
 
 ## Core Concepts
 
-- **SAE** (Semantic Action Encoding) — Canonical JSON representation of an action
-- **SAI** (Semantic Action Identifier) — Cryptographic hash: `SHA256("VAX-SAI" || prevSAI || SHA256(SAE))`
-- **Actor Chain** — One `(user_id, device_id)` = one linear history
-- **prevSAI** — Each action references its predecessor, forming an append-only chain
+### SAI Chain (Merkle-like)
+
+```
+SAI_0 = SHA256("VAX-GENESIS" || actorID || genesisSalt)
+SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE))
+```
+
+Each action references its predecessor, forming an append-only chain.
+
+**Properties:**
+- Tamper-evident: Modifying any action breaks the chain
+- Deterministic: Same input → same SAI
+- Local: No coordination required
+
+### SAE (Semantic Action Encoding)
+
+Canonical JSON representation of an action:
+
+```json
+{
+  "action_type": "transfer",
+  "timestamp": 1704672000000,
+  "sdto": {
+    "username": "alice",
+    "amount": 500,
+    "currency": "USD"
+  }
+}
+```
+
+**Always use JCS (JSON Canonicalization Scheme):**
+- UTF-8 encoding
+- Lexicographic key ordering
+- No whitespace
+- Deterministic number format
+
+### Actor
+
+An `(user_id, device_id)` pair with one linear history.
+
+```
+actorID = "user123:device456"
+```
+
+Each Actor maintains:
+- One genesis SAI
+- One append-only chain
+
+---
+
+## Optional: Add Signatures
+
+VAX doesn't handle signatures. Use standard libraries:
+
+```go
+// Sign SAE (recommended)
+signature := ed25519.Sign(privateKey, saeBytes)
+
+// Or sign SAI
+signature := ed25519.Sign(privateKey, sai)
+
+// Store with signature
+db.Store(ActionRecord{
+    SAI:       sai,
+    SAE:       saeBytes,
+    PrevSAI:   prevSAI,
+    Signature: signature,  // Your choice
+})
+```
+
+**When to add signatures:**
+- Legal non-repudiation required
+- Multi-party accountability
+- External audit requirements
+
+**When NOT to add signatures:**
+- Internal audit logs
+- Trusted environment
+- Performance-critical scenarios
 
 ---
 
 ## Architecture
 
-VAX is **not a protocol**, it's a **tool**.
+VAX operates at Layer 0 (L0) - integrity only.
 
-Like Git:
-- Git doesn't enforce workflows → VAX doesn't enforce policies
-- Git guarantees history integrity → VAX guarantees action integrity
-- Git is local-first → VAX is local-first
-
-**Key principle:**
-> You may do the wrong thing — but you cannot pretend it never happened.
-
-See [Architecture & Philosophy](docs/ARCHITECTURE.md) for design rationale.
-
----
-
-## How It Works
-
-### 1. Genesis
 ```
-SAI_0 = SHA256("VAX-GENESIS" || actor_id || genesis_salt)
+┌─────────────────────────┐
+│   L2: Business Logic    │  ← Authorization, workflow
+├─────────────────────────┤
+│   L1: Semantic Layer    │  ← Schema, validation
+├─────────────────────────┤
+│   L0: VAX Integrity     │  ← Tamper evidence (SAI chain)
+├─────────────────────────┤
+│   TLS                   │  ← Transport security
+└─────────────────────────┘
 ```
-Each Actor (user + device) starts with a unique genesis SAI.
 
-### 2. Action Chain
-```
-SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE))
-```
-Each subsequent action references the previous SAI, forming a tamper-evident chain.
+**VAX Guarantees:**
+- ✅ Tamper detection via SAI chain
+- ✅ Deterministic encoding via JCS
+- ✅ Schema compliance via SDTO
 
-### 3. Verification
-Backend verifies:
-- prevSAI continuity (no gaps or reordering)
-- SAI computation correctness
-- Schema compliance
-- Backend signs the SAE to mark "action entered history"
+**VAX Does NOT Guarantee:**
+- ❌ Authorization (use L1/L2)
+- ❌ Signatures (add if needed)
+- ❌ Storage durability (use your DB)
+- ❌ Network security (use TLS)
 
 ---
 
@@ -137,7 +233,7 @@ Backend verifies:
 |----------|---------|--------|--------------|
 | **Go** | `pkg/vax` | ✅ Complete | None (pure Go) |
 | **C** | `libvax.a` | ✅ Complete | OpenSSL |
-| **TypeScript** | `ts/` | ✅ Complete | None (pure TypeScript) |
+| **TypeScript** | `ts/` | ✅ Complete | None (pure TS) |
 
 ### Cross-Language Verification
 
@@ -145,49 +241,103 @@ All implementations produce identical outputs:
 
 ```
 # Genesis SAI test vector
-actor_id: "user123:device456"
-genesis_salt: a1a2a3a4a5a6a7a8a9aaabacadaeafb0
-Expected: afc50728cd79e805a8ae06875a1ddf78ca11b0d56ec300b160fb71f50ce658c3
+actorID: "user123:device456"
+genesisSalt: a1a2a3a4a5a6a7a8a9aaabacadaeafb0
+Expected SAI: afc50728cd79e805a8ae06875a1ddf78ca11b0d56ec300b160fb71f50ce658c3
 ```
+
+---
+
+## Examples
+
+See [examples/](examples/) for common patterns:
+
+- **[no-signature](examples/no-signature/)** - Minimal setup, no signatures
+- **[backend-signature](examples/backend-signature/)** - Backend signs SAE
+- **[client-signature](examples/client-signature/)** - Client signs SAE
+- **[multi-party](examples/multi-party/)** - Multiple signatures per action
+- **[replica-verification](examples/replica-verification/)** - Cross-org verification
 
 ---
 
 ## Documentation
 
 - 🏗️ [Architecture & Design Philosophy](docs/ARCHITECTURE.md)
-- 📋 [L0 Technical Specification](docs/SPECIFICATION.md)
-- 🔧 [Go API Reference](go/README.md)
+- 📋 [L0 Specification](docs/SPECIFICATION.md)
+- 🔧 [Go SDK](go/README.md)
+- 🔧 [TypeScript SDK](ts/README.md)
 - 🔨 [C Build Instructions](c/BUILD.md)
 
 ---
 
-## Directory Layout
+## Design Principles
 
-```
-vax/
-├── docs/              # Shared documentation
-│   ├── ARCHITECTURE.md    # Design philosophy
-│   └── SPECIFICATION.md   # L0 technical spec
-├── c/                 # C reference implementation
-│   ├── include/vax.h      # Public API
-│   ├── src/               # Implementation
-│   └── test/              # Test suite
-├── go/                # Go implementation (pure Go)
-│   ├── pkg/vax/           # Core cryptographic primitives
-│   ├── pkg/vax/jcs/       # VAX-JCS canonicalizer
-│   ├── pkg/vax/sae/       # SAE builder
-│   └── pkg/vax/sdto/      # Schema-driven validation
-└── ts/                # TypeScript implementation
-    └── src/
-        ├── jcs/           # JCS canonicalizer
-        ├── sae/           # SAE builder
-        ├── sdto/          # Schema-driven validation
-        └── vax.ts         # Core primitives
-```
+### 1. Minimal
+
+Only cryptographic primitives. No opinions on storage, transport, or authorization.
+
+### 2. Deterministic
+
+Same input always produces same output. Verifiable across implementations and time.
+
+### 3. Local-First
+
+No coordination required. Each Actor maintains independent history.
+
+### 4. Incrementally Adoptable
+
+Start simple, add complexity only when needed.
 
 ---
 
-## Running Tests
+## Comparison
+
+### VAX vs Git
+
+| Aspect | VAX | Git |
+|--------|-----|-----|
+| **Target** | Actions | Files |
+| **Hash Chain** | SAI chain | Commit chain |
+| **Signatures** | Optional | Optional (GPG) |
+| **Branching** | No | Yes |
+| **Philosophy** | Tool, not protocol | Tool, not protocol |
+
+### VAX vs Blockchain
+
+| Aspect | VAX | Blockchain |
+|--------|-----|------------|
+| **Consensus** | None | Global (PoW/PoS) |
+| **Scalability** | O(1) per Actor | O(network) |
+| **Finality** | Immediate | Delayed |
+| **Adoption** | Incremental | All-or-nothing |
+
+### VAX vs Event Sourcing
+
+| Aspect | VAX | Event Sourcing |
+|--------|-----|----------------|
+| **Focus** | Integrity | State reconstruction |
+| **Verification** | Cryptographic | Replay-based |
+| **Determinism** | Byte-level | Semantic-level |
+
+---
+
+## Roadmap
+
+### v0.8 (Current)
+- [x] Simplified API (removed signatures)
+- [x] Pure tool philosophy
+- [x] Cross-language implementations
+- [x] Complete documentation
+
+### Future
+- [ ] CLI tooling
+- [ ] Audit visualization
+- [ ] Performance benchmarks
+- [ ] Python bindings
+
+---
+
+## Testing
 
 ```bash
 # Go
@@ -202,48 +352,15 @@ cd ts && npm test
 
 ---
 
-## Design Philosophy
+## Contributing
 
-### What VAX Provides
-- **Append-only history**: Actions cannot be removed or reordered
-- **Tamper-evident**: Any change to history is detectable
-- **Local-first**: No coordination required between actors
-- **Cross-language**: Deterministic results across implementations
+VAX grows by **usage**, not mandates.
 
-### What VAX Does NOT Provide
-- **Authorization**: VAX records what happened, not what's allowed
-- **Conflict resolution**: Divergent histories are detected, not merged
-- **Business logic**: Correctness is enforced at higher layers
-
-### Defense in Depth
-```
-┌─────────────────────────┐
-│   L2: Business Logic    │  ← Authorization, workflow
-├─────────────────────────┤
-│   L1: Semantic Layer    │  ← Schema, validation
-├─────────────────────────┤
-│   L0: VAX Integrity     │  ← Tamper evidence
-├─────────────────────────┤
-│   TLS                   │  ← Transport security
-└─────────────────────────┘
-```
-
----
-
-## Roadmap
-
-### v0.7 (Current)
-- [x] C core implementation
-- [x] Go pure implementation
-- [x] TypeScript complete implementation
-- [x] Cross-language test vectors
-- [x] Schema-driven validation (SDTO)
-- [ ] CLI tooling
-
-### Future
-- Python bindings
-- Audit visualization tools
-- Performance benchmarks
+Contributions welcome:
+- Cross-language test vectors
+- Real-world use cases
+- Performance improvements
+- Additional language bindings
 
 ---
 
@@ -253,9 +370,14 @@ MIT License — Free to use, modify, and distribute with attribution.
 
 ---
 
-## Contributing
+## Credits
 
-Cross-language test vectors, semantic edge cases,
-and audit tooling are welcome.
+Inspired by:
+- Git's design philosophy
+- Merkle trees
+- CQRS/Event Sourcing
+- DDD tactical patterns
 
-VAX grows by **usage**, not mandates.
+**VAX = Verifiable Action eXchange**
+
+Not a protocol. Not a system. Just a tool.

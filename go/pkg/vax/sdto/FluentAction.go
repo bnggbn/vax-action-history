@@ -161,7 +161,15 @@ func (f *FluentAction) Finalize() ([]byte, error) {
 	}
 
 	if len(f.errs) > 0 {
-		return nil, errors.Join(f.errs...)
+		// Aggregate errors into a single message
+		msg := ""
+		for i, err := range f.errs {
+			if i > 0 {
+				msg += "; "
+			}
+			msg += err.Error()
+		}
+		return nil, errors.New(msg)
 	}
 	// 調用你剛剛寫好的 SAE.BuildSAE
 	return sae.BuildSAE(f.actionType, f.data)
@@ -191,7 +199,15 @@ func ValidateData(data map[string]any, schema map[string]FieldSpec) error {
 	}
 
 	if len(errs) > 0 {
-		return errors.Join(errs...)
+		// Aggregate errors into a single message
+		msg := ""
+		for i, err := range errs {
+			if i > 0 {
+				msg += "; "
+			}
+			msg += err.Error()
+		}
+		return errors.New(msg)
 	}
 	return nil
 }

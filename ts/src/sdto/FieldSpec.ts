@@ -1,6 +1,6 @@
 // FieldSpec defines the validation rules for a field
 export interface FieldSpec {
-  type: "string" | "number" | "sign";
+  type: "string" | "number";
   min?: string;
   max?: string;
   enum?: string[];
@@ -18,7 +18,7 @@ export function parseSchema(raw: Record<string, unknown>): Record<string, FieldS
 
     const m = val as Record<string, unknown>;
     const spec: FieldSpec = {
-      type: (m["type"] as "string" | "number" | "sign") ?? "string",
+      type: (m["type"] as "string" | "number") ?? "string",
     };
 
     if (typeof m["min"] === "string") {

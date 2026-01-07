@@ -59,25 +59,9 @@ function validateValue(value: unknown, spec: FieldSpec): Error | null {
       return validateString(value, spec);
     case "number":
       return validateNumber(value, spec);
-    case "sign":
-      return validateSign(value, spec);
     default:
       return new Error(`unknown type "${spec.type}"`);
   }
-}
-
-function validateSign(value: unknown, spec: FieldSpec): Error | null {
-  // Sign value must be string (type is defined in schema)
-  if (typeof value !== "string") {
-    return new Error("sign field expects string value");
-  }
-
-  // Can extend: validate format based on spec.enum[0] (hex/base64 etc)
-  if (value.length === 0) {
-    return new Error("sign value cannot be empty");
-  }
-
-  return null;
 }
 
 function validateString(value: unknown, spec: FieldSpec): Error | null {

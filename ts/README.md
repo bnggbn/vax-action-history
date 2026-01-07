@@ -1,352 +1,370 @@
 # VAX TypeScript SDK
 
-Zero-dependency tamper-evident action history for TypeScript/JavaScript.
+Pure TypeScript implementation of VAX cryptographic primitives.
 
-## Features
+Zero dependencies. Works in Node.js, Bun, Deno, and browsers.
 
-- ✅ **Complete VAX implementation** - JCS, SAE, SDTO, Core primitives
-- ✅ **Pure TypeScript** - No external dependencies for core functionality
-- ✅ **Cross-platform** - Works in Node.js, Bun, Deno, and browsers
-- ✅ **Identical output** - Produces same results as Go and C implementations
-- ✅ **Type-safe** - Full TypeScript type definitions
+---
 
 ## Installation
 
 ```bash
-cd ts
-npm install
+npm install vax
 ```
 
-## Build
+---
 
-```bash
-npm run build
-```
+## Philosophy
 
-## Test
+VAX provides **primitives**, not a complete system.
 
-```bash
-npm test                # Run all tests
-npm run test:watch      # Watch mode
-npm run test:coverage   # With coverage
-```
+**You control:**
+- Storage structure
+- Whether to add signatures
+- Authorization logic
+- Transport protocol
+
+**VAX provides:**
+- SAI chain computation
+- JCS canonicalization
+- Schema validation
 
 ---
 
 ## Quick Start
 
-### 1. Import the SDK
-
 ```typescript
-import {
-  // Core VAX functions
-  computeSAI,
-  computeGenesisSAI,
-  verifyAction,
-  generateGenesisSalt,
+import { computeGenesisSAI, computeSAI, generateGenesisSalt } from 'vax';
 
-  // JCS - JSON Canonicalization
-  marshal,
+// 1. Genesis
+const actorID = 'user123:device456';
+const genesisSalt = generateGenesisSalt();
+const genesisSAI = await computeGenesisSAI(actorID, genesisSalt);
 
-  // SAE - Semantic Action Envelope
-  buildSAE,
-  signEnvelope,
+// 2. Build action
+const saeBytes = buildAction('transfer', data);
 
-  // SDTO - Schema-Driven Validation
-  newSchemaBuilder,
-  newAction,
-} from './src';
+// 3. Compute SAI
+const sai = await computeSAI(genesisSAI, saeBytes);
+
+// 4. Store (your structure)
+store({ sai, sae: saeBytes, prevSAI: genesisSAI });
 ```
 
-### 2. Define Schema (Backend)
+---
+
+## Core API
+
+### Genesis
 
 ```typescript
-import { newSchemaBuilder } from './src';
+async function computeGenesisSAI(
+  actorID: string,
+  genesisSalt: Uint8Array
+): Promise<Uint8Array>
+```
 
-// Define action constraints
-const builder = newSchemaBuilder()
+Compute genesis SAI for an Actor.
+
+**Formula:**
+```
+SAI_0 = SHA256("VAX-GENESIS" || actorID || genesisSalt)
+```
+
+**Example:**
+```typescript
+const actorID = 'user123:device456';
+const salt = generateGenesisSalt();  // 16 random bytes
+const sai = await computeGenesisSAI(actorID, salt);
+```
+
+---
+
+### Chain
+
+```typescript
+async function computeSAI(
+  prevSAI: Uint8Array,
+  saeBytes: Uint8Array
+): Promise<Uint8Array>
+```
+
+Compute SAI for an action.
+
+**Formula:**
+```
+SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE))
+```
+
+**Example:**
+```typescript
+const sae = buildSAE('transfer', data);
+const sai = await computeSAI(prevSAI, sae);
+```
+
+---
+
+### Verification
+
+```typescript
+async function verifyChain(
+  expectedPrevSAI: Uint8Array,
+  saeBytes: Uint8Array,
+  clientSAI: Uint8Array
+): Promise<void>
+```
+
+Verify SAI chain integrity.
+
+**Throws:**
+- `InvalidPrevSAIError` - Chain discontinuity
+- `SAIMismatchError` - SAI computation mismatch
+
+**Example:**
+```typescript
+try {
+  await verifyChain(expectedPrevSAI, saeBytes, clientSAI);
+  // Chain valid
+} catch (error) {
+  if (error instanceof SAIMismatchError) {
+    // SAI mismatch
+  }
+}
+```
+
+---
+
+## Schema-Driven Validation (SDTO)
+
+### Define Schema
+
+```typescript
+import { newSchemaBuilder } from 'vax';
+
+const schema = newSchemaBuilder()
   .setActionStringLength('username', '3', '20')
   .setActionNumberRange('amount', '0', '1000000')
-  .setActionEnum('currency', ['USD', 'EUR', 'TWD']);
-
-const schema = builder.buildSchema();
-
-// Transport schema to client via API
-const schemaJSON = schema; // Record<string, FieldSpec>
+  .setActionEnum('currency', ['USD', 'EUR', 'TWD'])
+  .buildSchema();
 ```
 
-### 3. Build Action (Client)
+### Build Validated Action
 
 ```typescript
-import { newAction } from './src';
+import { newAction } from 'vax';
 
-// Build validated action
+const saeBytes = newAction('transfer', schema)
+  .set('username', 'alice')
+  .set('amount', 500.0)
+  .set('currency', 'USD')
+  .finalize();  // Returns Buffer with canonical JSON
+```
+
+**Validation happens at `.set()` time.** Errors collected and thrown at `.finalize()`.
+
+### Server-Side Validation
+
+```typescript
+import { validateData } from 'vax';
+
+// Backend validates SDTO against schema
+try {
+  validateData(action.sdto, schema);
+} catch (error) {
+  // Schema violation
+}
+```
+
+---
+
+## JCS (JSON Canonicalization)
+
+```typescript
+import { marshal } from 'vax';
+
+// Marshal to canonical JSON
+const canonical = marshal(obj);
+
+// Always produces identical output
+const obj1 = { b: 2, a: 1 };
+const obj2 = { a: 1, b: 2 };
+
+const bytes1 = marshal(obj1);  // {"a":1,"b":2}
+const bytes2 = marshal(obj2);  // {"a":1,"b":2}
+// bytes1.equals(bytes2) ✅
+```
+
+**Never use `JSON.stringify()` for SAE. Always use `marshal()`.**
+
+---
+
+## SAE (Semantic Action Envelope)
+
+```typescript
+import { buildSAE } from 'vax';
+
+const saeBytes = buildSAE('transfer', {
+  username: 'alice',
+  amount: 500.0,
+  currency: 'USD',
+});
+
+// Returns Buffer with canonical JSON:
+// {"action_type":"transfer","sdto":{...},"timestamp":1704672000000}
+```
+
+**Structure:**
+```typescript
+interface Envelope {
+  action_type: string;
+  timestamp: number;
+  sdto: Record<string, unknown>;
+}
+```
+
+**No signature field.** If you need signatures, add them yourself.
+
+---
+
+## Complete Workflow
+
+### Client Side
+
+```typescript
+import { computeSAI, newAction } from 'vax';
+
+// 1. Get schema from backend
+const schema = await backend.getSchema('transfer');
+
+// 2. Build validated action
 const saeBytes = newAction('transfer', schema)
   .set('username', 'alice')
   .set('amount', 500.0)
   .set('currency', 'USD')
   .finalize();
 
-// saeBytes is canonical JSON (JCS)
-```
-
-### 4. Compute SAI (Client)
-
-```typescript
-import { computeGenesisSAI, computeSAI, generateGenesisSalt } from './src';
-
-// First action: Genesis
-const actorID = 'user123:device456';
-const genesisSalt = generateGenesisSalt();
-const genesisSAI = await computeGenesisSAI(actorID, genesisSalt);
-
-// Subsequent actions
-const prevSAI = genesisSAI; // or last SAI from storage
+// 3. Compute SAI
+const prevSAI = getLastSAI();
 const sai = await computeSAI(prevSAI, saeBytes);
 
-// Submit to backend: { prevSAI, saeBytes, sai }
+// 4. Submit to backend
+await backend.submit({
+  sai,
+  sae: saeBytes,
+  prevSAI,
+});
 ```
 
-### 5. Verify Action (Backend)
+### Backend Side
 
 ```typescript
-import { verifyAction } from './src';
+import { verifyChain, validateData } from 'vax';
 
-// Backend receives: expectedPrevSAI, prevSAI, saeBytes, clientSAI
-const signedEnvelope = await verifyAction(
-  expectedPrevSAI,     // What backend expects
-  prevSAI,             // What client claims
-  saeBytes,            // Client's SAE
-  clientSAI,           // Client's computed SAI
-  schema,              // Backend's schema
-  privateKey           // Backend's Ed25519 private key (64 bytes)
+// 1. Verify chain
+await verifyChain(expectedPrevSAI, req.sae, req.sai);
+
+// 2. Validate schema
+const env = JSON.parse(req.sae.toString());
+validateData(env.sdto, schema);
+
+// 3. Optional: Add signature (using @noble/ed25519 or similar)
+const signature = await ed25519.sign(req.sae, privateKey);
+
+// 4. Store (your structure)
+await db.store({
+  sai: req.sai,
+  sae: req.sae,
+  prevSAI: req.prevSAI,
+  signature,  // optional
+  timestamp: Date.now(),
+});
+```
+
+---
+
+## Optional: Signatures
+
+VAX doesn't handle signatures. Use standard libraries:
+
+### Node.js 18+ (Web Crypto)
+
+```typescript
+// Note: Ed25519 support requires Node.js 18+ with experimental flag
+// For production, use @noble/ed25519
+
+const keyPair = await crypto.subtle.generateKey(
+  'Ed25519',
+  true,
+  ['sign', 'verify']
 );
 
-// signedEnvelope contains backend signature
-// Store: { sai, signedEnvelope, timestamp }
+const signature = await crypto.subtle.sign(
+  'Ed25519',
+  keyPair.privateKey,
+  saeBytes
+);
 ```
 
----
+### Using @noble/ed25519
 
-## API Reference
-
-### Core Functions
-
-#### `computeSAI(prevSAI: Uint8Array, saeBytes: Uint8Array): Promise<Uint8Array>`
-
-Compute SAI for an action.
-
-**Formula:** `SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE))`
-
-**Example:**
 ```typescript
-const sai = await computeSAI(prevSAI, saeBytes);
-// Returns: 32-byte SAI
+import * as ed25519 from '@noble/ed25519';
+
+// Generate key pair
+const privateKey = ed25519.utils.randomPrivateKey();
+const publicKey = await ed25519.getPublicKey(privateKey);
+
+// Sign
+const signature = await ed25519.sign(saeBytes, privateKey);
+
+// Verify
+const valid = await ed25519.verify(signature, saeBytes, publicKey);
 ```
 
-#### `computeGenesisSAI(actorID: string, genesisSalt: Uint8Array): Promise<Uint8Array>`
+**Storage is your choice:**
 
-Compute genesis SAI for an Actor.
-
-**Formula:** `SAI_0 = SHA256("VAX-GENESIS" || actorID || genesisSalt)`
-
-**Example:**
 ```typescript
-const genesisSAI = await computeGenesisSAI('user:device', salt);
-// Returns: 32-byte genesis SAI
-```
-
-#### `verifyAction(...): Promise<Envelope>`
-
-Backend verification: verify and sign action.
-
-**Returns:** Signed envelope with backend signature
-
-#### `generateGenesisSalt(): Uint8Array`
-
-Generate random 16-byte genesis salt using `crypto.getRandomValues()`.
-
----
-
-### JCS - JSON Canonicalization Scheme
-
-#### `marshal(value: unknown): Buffer`
-
-Marshal any JavaScript value into canonical JSON bytes.
-
-**Features:**
-- UTF-8 encoding
-- No whitespace (compact form)
-- Lexicographic key ordering
-- No scientific notation
-- Non-ASCII characters escaped as `\uXXXX`
-- NFC normalization
-
-**Example:**
-```typescript
-const bytes = marshal({ action: 'test', value: 42 });
-// Returns: Buffer containing '{"action":"test","value":42}'
-```
-
-#### `canonicalizeJSON(input: Buffer | string): Buffer`
-
-Canonicalize existing JSON bytes or string.
-
-#### `normalizeJSONNumber(raw: string): string`
-
-Normalize a JSON number string according to VAX-JCS rules.
-
----
-
-### SAE - Semantic Action Envelope
-
-#### `buildSAE(actionType: string, sdto: Record<string, unknown>): Buffer`
-
-Build a Semantic Action Envelope using JCS canonicalizer.
-
-**Structure:**
-```typescript
-{
-  action_type: string;
-  timestamp: number;
-  sdto: Record<string, unknown>;
-  signature?: Uint8Array;
+// Option A: Separate field
+interface ActionRecord {
+  sai: Uint8Array;
+  sae: Uint8Array;
+  prevSAI: Uint8Array;
+  signature?: Uint8Array;  // Independent
 }
-```
 
-**Example:**
-```typescript
-const saeBytes = buildSAE('transfer', { username: 'alice', amount: 500 });
-```
+// Option B: Wrap in metadata
+interface ActionWithMeta {
+  action: {
+    sai: Uint8Array;
+    sae: Uint8Array;
+    prevSAI: Uint8Array;
+  };
+  metadata: {
+    signature?: Uint8Array;
+    timestamp: number;
+    author: string;
+  };
+}
 
-#### `signEnvelope(envelope: Envelope, privateKey: Uint8Array): Promise<Envelope>`
-
-Sign an envelope with Ed25519 private key.
-
-**Note:** Requires Ed25519 support (Node.js 18+ or `@noble/ed25519` library)
-
----
-
-### SDTO - Schema-Driven Validation
-
-#### `newSchemaBuilder(): SchemaBuilder`
-
-Create a new schema builder.
-
-**Methods:**
-```typescript
-builder.setActionStringLength(field: string, min: string, max: string)
-builder.setActionNumberRange(field: string, min: string, max: string)
-builder.setActionEnum(field: string, values: string[])
-builder.setActionSign(field: string, signType: string)
-builder.setActionSignMulti(field: string, signTypes: string[])
-builder.buildSchema(): Record<string, FieldSpec>
-```
-
-#### `newAction(actionType: string, schema: Record<string, FieldSpec>): FluentAction`
-
-Create a new action builder with validation.
-
-**Methods:**
-```typescript
-action.set(key: string, value: unknown): FluentAction
-action.finalize(): Buffer  // Returns JCS-canonicalized SAE bytes
-```
-
-**Example:**
-```typescript
-const saeBytes = newAction('transfer', schema)
-  .set('username', 'alice')
-  .set('amount', 500)
-  .finalize();
-```
-
-#### `validateData(data: Record<string, unknown>, schema: Record<string, FieldSpec>): void`
-
-Server-side validation of SDTO against schema.
-
----
-
-## Core Formulas
-
-```typescript
-// Genesis (first action for an Actor)
-SAI_0 = SHA256("VAX-GENESIS" || actorID || genesisSalt)
-
-// Subsequent actions
-SAI_n = SHA256("VAX-SAI" || prevSAI || SHA256(SAE))
-
-// Where:
-// - actorID: "user_id:device_id"
-// - genesisSalt: 16 random bytes, persistent per Actor
-// - prevSAI: previous action's SAI (or SAI_0)
-// - SAE: Semantic Action Encoding (canonical JSON)
+// Your choice!
 ```
 
 ---
 
-## Key Principles
-
-### Always use JCS
+## Helpers
 
 ```typescript
-// ✅ Correct
-import { marshal } from './jcs';
-const bytes = marshal(obj);
+// Generate random genesis salt
+const salt = generateGenesisSalt();  // 16 bytes
 
-// ❌ Wrong
-const bytes = JSON.stringify(obj);
+// Hex encoding
+const hex = toHex(sai);
+const sai = fromHex(hex);
+
+// Constants
+SAI_SIZE           // 32
+GENESIS_SALT_SIZE  // 16
 ```
-
-### Validation Happens Early
-
-```typescript
-// Validation at .set() time
-const action = newAction('transfer', schema)
-  .set('amount', -100);  // ❌ Fails immediately if schema disallows negatives
-
-// Errors collected and thrown at .finalize()
-const saeBytes = action.finalize();  // Throws if any validations failed
-```
-
-### Backend Authority
-
-- Backend **verifies** SAI, never computes it
-- Backend **signs** SAE to mark "action entered history"
-- Schema is backend's authority
-- Backend never repairs or modifies client data (IRP principle)
-
----
-
-## Test Vectors
-
-The test suite uses **identical test vectors** across all implementations (Go, C, TypeScript) to ensure cross-language compatibility.
-
-Key test categories:
-- Basic types (null, boolean, number, string)
-- Arrays and objects
-- Nested structures
-- Unicode handling (including emoji with surrogate pairs)
-- Number normalization (including -0 handling)
-- Error cases (scientific notation, leading zeros)
-
----
-
-## Cross-Language Verification
-
-To verify output matches other implementations:
-
-```bash
-# Go
-cd ../go
-go test ./pkg/vax/...
-
-# TypeScript
-cd ../ts
-npm test
-```
-
-All implementations should produce identical canonical JSON output for the same inputs.
 
 ---
 
@@ -358,15 +376,15 @@ import {
   InvalidInputError,
   InvalidPrevSAIError,
   SAIMismatchError
-} from './src';
+} from 'vax';
 
 try {
-  const sai = await computeSAI(prevSAI, saeBytes);
+  await computeSAI(prevSAI, saeBytes);
 } catch (error) {
   if (error instanceof InvalidInputError) {
-    // Handle invalid input
+    // Invalid input parameters
   } else if (error instanceof SAIMismatchError) {
-    // Handle SAI verification failure
+    // SAI computation mismatch
   }
 }
 ```
@@ -376,45 +394,137 @@ try {
 ## Platform Compatibility
 
 ### Node.js
+
 ```bash
-node --version  # 18+ recommended for Ed25519 support
+node --version  # 18+ recommended
 npm test
 ```
 
 ### Bun
+
 ```bash
 bun test
 ```
 
 ### Deno
+
 ```typescript
 import { computeSAI } from './src/index.ts';
 ```
 
 ### Browser
-The SDK works in modern browsers that support:
+
+Works in modern browsers supporting:
 - `crypto.subtle` (Web Crypto API)
 - `TextEncoder` / `TextDecoder`
 - ES2020+
 
 ---
 
-## License
+## Testing
 
-MIT License — Free to use, modify, and distribute with attribution.
+```bash
+npm test              # Run all tests
+npm run test:watch   # Watch mode
+npm run test:coverage # With coverage
+```
+
+---
+
+## Examples
+
+See [examples/](examples/) for complete workflows:
+
+- **[minimal](examples/minimal/)** - Simplest usage, no signatures
+- **[with-signature](examples/with-signature/)** - Add backend signature
+- **[browser](examples/browser/)** - Browser usage
+- **[node](examples/node/)** - Node.js usage
+
+---
+
+## Key Principles
+
+### 1. Always use marshal()
+
+```typescript
+// ✅ Correct
+import { marshal } from 'vax';
+const bytes = marshal(obj);
+
+// ❌ Wrong
+const bytes = Buffer.from(JSON.stringify(obj));
+```
+
+### 2. Validate early
+
+```typescript
+// Validation at .set() time
+const action = newAction('transfer', schema)
+  .set('amount', -100);  // ❌ Fails immediately
+
+// Errors collected at .finalize()
+const saeBytes = action.finalize();
+```
+
+### 3. Backend verifies, never repairs
+
+```typescript
+// ✅ Backend verifies
+await verifyChain(...);
+validateData(...);
+
+// ❌ Backend never "fixes" client data
+// Don't do: data.amount = Math.abs(data.amount)
+```
+
+---
+
+## Performance
+
+Pure TypeScript with no dependencies:
+
+```
+ComputeSAI:        ~25 µs
+ComputeGenesisSAI: ~12 µs
+JCS Marshal:       ~8 µs
+```
+
+---
+
+## Cross-Language Compatibility
+
+All implementations produce identical output:
+
+```bash
+# Test vector
+actorID: "user123:device456"
+genesisSalt: a1a2a3a4a5a6a7a8a9aaabacadaeafb0
+
+# Expected
+genesisSAI: afc50728cd79e805a8ae06875a1ddf78ca11b0d56ec300b160fb71f50ce658c3
+
+# Verify
+npm test
+```
 
 ---
 
 ## Documentation
 
-- [Architecture & Design Philosophy](../docs/ARCHITECTURE.md)
-- [L0 Technical Specification](../docs/SPECIFICATION.md)
-- [Go API Reference](../go/README.md)
+- [Architecture](../docs/ARCHITECTURE.md)
+- [L0 Specification](../docs/SPECIFICATION.md)
 
 ---
 
-## Contributing
+## License
 
-Cross-language test vectors, semantic edge cases, and tooling improvements are welcome.
+MIT License
 
-VAX grows by **usage**, not mandates.
+---
+
+## Philosophy
+
+> VAX is a tool, not a system.
+>
+> We provide primitives.
+> You decide how to use them.

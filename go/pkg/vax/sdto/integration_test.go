@@ -59,55 +59,6 @@ func TestBuilderToConstructor_EnumField(t *testing.T) {
 	}
 }
 
-func TestBuilderToConstructor_SignField(t *testing.T) {
-	schema := NewSchemaBuilder()
-	schema.SetActionSign("signature", "ed25519")
-
-	sae, err := NewAction("signedAction", schema.BuildSchema()).
-		Set("signature", "base64encodedSignature==").
-		Finalize()
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if sae == nil {
-		t.Fatal("expected SAE bytes, got nil")
-	}
-}
-
-func TestBuilderToConstructor_SignMulti(t *testing.T) {
-	schema := NewSchemaBuilder()
-	schema.SetActionSignMulti("signature", []string{"ed25519", "rsa"})
-
-	sae, err := NewAction("signedAction", schema.BuildSchema()).
-		Set("signature", "signatureValue123").
-		Finalize()
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if sae == nil {
-		t.Fatal("expected SAE bytes, got nil")
-	}
-}
-
-func TestBuilderToConstructor_SignRejectMap(t *testing.T) {
-	schema := NewSchemaBuilder()
-	schema.SetActionSign("signature", "ed25519")
-
-	// map should be rejected - sign only accepts string
-	_, err := NewAction("signedAction", schema.BuildSchema()).
-		Set("signature", map[string]any{
-			"type":  "ed25519",
-			"value": "sig",
-		}).
-		Finalize()
-
-	if err == nil {
-		t.Fatal("expected error for map value in sign field")
-	}
-}
-
 func TestBuilderToConstructor_ValidationError_UnknownField(t *testing.T) {
 	schema := NewSchemaBuilder()
 	schema.SetActionStringLength("name", "1", "50")
@@ -377,101 +328,18 @@ func TestBuild_RoundTrip(t *testing.T) {
 	}
 }
 
-// Sign field integration tests
-func TestValidateData_SignField(t *testing.T) {
+func TestValidateData_MissingRequiredField(t *testing.T) {
 	builder := NewSchemaBuilder()
-	builder.SetActionSign("signature", "ed25519")
+	builder.SetActionStringLength("name", "1", "50")
 	schema := builder.BuildSchema()
 
 	data := map[string]any{
-		"signature": "validSignatureString",
-	}
-
-	err := ValidateData(data, schema)
-	if err != nil {
-		t.Errorf("ValidateData failed: %v", err)
-	}
-}
-
-func TestValidateData_SignRejectMap(t *testing.T) {
-	builder := NewSchemaBuilder()
-	builder.SetActionSign("signature", "ed25519")
-	schema := builder.BuildSchema()
-
-	data := map[string]any{
-		"signature": map[string]any{"type": "ed25519", "value": "sig"},
+		"other": "value",
 	}
 
 	err := ValidateData(data, schema)
 	if err == nil {
-		t.Error("expected error for map value in sign field")
+		t.Error("expected error for missing required field")
 	}
 }
 
-func TestValidateData_SignEmptyValue(t *testing.T) {
-	builder := NewSchemaBuilder()
-	builder.SetActionSign("signature", "ed25519")
-	schema := builder.BuildSchema()
-
-	data := map[string]any{
-		"signature": "",
-	}
-
-	err := ValidateData(data, schema)
-	if err == nil {
-		t.Error("expected error for empty sign value")
-	}
-}
-
-func TestBuild_SignField(t *testing.T) {
-	builder := NewSchemaBuilder()
-	builder.SetActionSign("signature", "ed25519")
-	builder.SetActionSignMulti("multi_sig", []string{"ed25519", "rsa"})
-
-	result := builder.Build()
-	props := result["properties"].(map[string]any)
-
-	// Check sign field
-	sigField := props["signature"].(map[string]any)
-	if sigField["type"] != "sign" {
-		t.Errorf("signature.type = %v, want sign", sigField["type"])
-	}
-	sigEnum := sigField["enum"].([]string)
-	if len(sigEnum) != 1 || sigEnum[0] != "ed25519" {
-		t.Errorf("signature.enum = %v, want [ed25519]", sigEnum)
-	}
-
-	// Check multi sign field
-	multiField := props["multi_sig"].(map[string]any)
-	multiEnum := multiField["enum"].([]string)
-	if len(multiEnum) != 2 {
-		t.Errorf("multi_sig.enum = %v, want [ed25519 rsa]", multiEnum)
-	}
-}
-
-func TestSign_RoundTrip(t *testing.T) {
-	// Provider
-	builder := NewSchemaBuilder()
-	builder.SetActionSign("signature", "ed25519")
-	builder.SetActionStringLength("message", "1", "100")
-
-	// Export
-	exported := builder.Build()
-	props := exported["properties"].(map[string]any)
-
-	// Consumer
-	parsed := ParseSchema(props)
-
-	// Valid action
-	sae, err := NewAction("signedMessage", parsed).
-		Set("message", "hello world").
-		Set("signature", "base64sig==").
-		Finalize()
-
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if sae == nil {
-		t.Fatal("expected SAE bytes")
-	}
-}

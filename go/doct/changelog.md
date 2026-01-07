@@ -79,13 +79,28 @@
 - Unused dependencies in `go.sum`
 
 -- 20260107 --
-### Added
-- **Sign type support in SDTO**
-  - `FieldSpec` now supports `Type: "sign"` for signature field validation
-  - `SchemaBuilder.SetActionSign()`: Set single signature algorithm type
-  - `SchemaBuilder.SetActionSignMulti()`: Set multiple allowed signature types
-  - `SupportedSignTypes` constant: `[]string{"ed25519", "rsa", "ecdsa"}`
-  - `validateSign()`: Validates signature field format and non-empty constraint
+### Removed
+- **Sign type support in SDTO** (reverted)
+  - Removed `sign` type from `FieldSpec`
+  - Removed `SchemaBuilder.SetActionSign()` and `SetActionSignMulti()` methods
+  - Removed `SupportedSignTypes` constant
+  - Removed `validateSign()` function
+  - Removed signature-related tests from `integration_test.go`
+
+- **SAE signing functionality**
+  - Removed `Signature` field from `sae.Envelope`
+  - Removed `GenerateKeyPair()` function
+  - Removed `Sign()` method on `Envelope`
+  - Removed signing-related tests from `sae_test.go`
+
+- **VerifyAction signing**
+  - Removed `privateKey` parameter from `VerifyAction()`
+  - Removed signature verification checks
+  - Removed `crypto/ed25519` import from `vax.go`
+
+### Fixed
+- Replaced `errors.Join()` with manual error aggregation for Go < 1.20 compatibility
+- Cleaned up unused imports (`crypto/rand`, `errors`) from `sae.go`
 
 ### Documentation
 - **Cross-language architecture alignment**

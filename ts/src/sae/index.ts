@@ -4,4 +4,4 @@
  * Semantic Action Envelope for VAX action history
  */
 
-export { Envelope, buildSAE, signEnvelope, generateKeyPair } from './sae';
+export { Envelope, buildSAE } from './sae';

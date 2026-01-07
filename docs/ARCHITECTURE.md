@@ -21,9 +21,9 @@
 
 ---
 
-## 1. Core Principle: Tool, Not Protocol
+## 1. Core Principle: Tool, Not System
 
-VAX is a **reference implementation**, not a normative standard.
+VAX is a **library of primitives**, not a normative standard.
 
 Like Git:
 - Git is a tool for version control
@@ -44,6 +44,30 @@ This is fundamentally different from systems that attempt to:
 - establish global truth (consensus protocols)
 
 VAX only ensures that **what happened is verifiable**.
+
+### What VAX Provides
+
+**Cryptographic Primitives:**
+- `ComputeGenesisSAI()` - Genesis computation
+- `ComputeSAI()` - Chain computation
+- `VerifyChain()` - Integrity verification
+- JCS canonicalization - Deterministic encoding
+- SDTO validation - Schema compliance
+
+**What VAX Does NOT Provide:**
+- ❌ Signature mechanism (use standard libraries)
+- ❌ Storage structure (define your own)
+- ❌ Authorization logic (implement in L1/L2)
+- ❌ Transport protocol (use HTTP/gRPC/etc)
+- ❌ Key management (use your KMS)
+
+### User Decisions
+
+Users control:
+- **Storage**: SQL, NoSQL, file system, blockchain - your choice
+- **Signatures**: Add if needed, using ed25519/RSA/etc
+- **Authorization**: Implement at application layer
+- **Workflow**: Single-party, multi-party, async - your design
 
 ---
 
@@ -150,18 +174,24 @@ SAE (canonical encoding)
     ↓
 SAI = SHA256("VAX-SAI" || prevSAI || SHA256(SAE))
     ↓
-Action Envelope (SAE + SAI + prevSAI)
+Action Record
     ↓
-Backend: VERIFY prevSAI continuity (never modify)
+Backend: VERIFY prevSAI continuity
     ↓
 Backend: VERIFY SAI computation
     ↓
 Backend: VERIFY SDTO against Schema
     ↓
-Backend: SIGN SAE (action enters history)
+Backend: ACCEPT or REJECT
     ↓
-COMMIT or REJECT
+[Optional] User adds signature externally
+    ↓
+STORE (user-defined structure)
 ```
+
+**Critical Principle:**
+
+VAX provides verification primitives. Storage and signatures are user decisions.
 
 **Critical Constraint:**
 
@@ -349,22 +379,33 @@ How conflicts are interpreted, prioritized, or resolved is explicitly
 
 **1. Legal Non-Repudiation**
 
-VAX L0 uses hash chains for integrity, not cryptographic signatures.
+VAX L0 uses hash chains for integrity, not signatures.
 
-Backend signatures (Ed25519) are added at verification time to mark
-"action entered history", but client signatures are optional and
-schema-dependent.
+If legal non-repudiation is required, add signatures yourself:
 
-Why this design?
-- Simpler L0 implementation
-- Faster verification
-- Adequate for most use cases
-- Signatures can be added when needed
+```go
+// Backend signs SAE
+signature := ed25519.Sign(backendKey, saeBytes)
 
-If legal non-repudiation from clients is required:
-- Schema can mandate client signatures via `sign` or `sign_multi` fields
-- Backend always signs to establish authority
-- This is L1 concern, not L0
+// Client signs SAE (optional)
+clientSig := ed25519.Sign(clientKey, saeBytes)
+
+// Store with your structure
+db.Store(ActionRecord{
+    SAI:            sai,
+    SAE:            saeBytes,
+    BackendSig:     signature,
+    ClientSig:      clientSig,  // optional
+})
+```
+
+Why VAX doesn't include signatures:
+- Keeps L0 minimal and focused
+- Avoids key management complexity
+- Users can choose signature scheme (Ed25519, RSA, etc)
+- Not all use cases need signatures
+
+**Non-repudiation is a user concern, not a VAX primitive.**
 
 **2. Business Correctness**
 
@@ -501,25 +542,29 @@ Both are **tools for integrity**, not coordination protocols.
 - Use device_id as part of Actor
 - Higher layer can merge Actor histories
 
-### Trade-off 2: Backend-Only Signatures (Client Signatures Optional)
+### Trade-off 2: No Built-in Signatures
 
-**We chose:** Backend always signs, client signatures schema-dependent
-**We gave up:** Mandatory client signatures for all actions
+**We chose:** Hash chains only, no signature primitives
+**We gave up:** Built-in non-repudiation mechanism
 
 **Why?**
-- Simpler client implementation
-- Flexibility: schema decides when client signature is needed
-- Backend signature establishes authority ("action entered history")
-- Adequate for most use cases
+- Keeps L0 minimal and focused
+- Avoids key management complexity
+- Users can add signatures as needed
+- Flexible: choose any signature scheme
 
 **When this hurts:**
-- Legal disputes requiring client non-repudiation
-- Multi-party contracts where all parties must sign
+- Legal non-repudiation required
+- Need proof of who created an action
 
 **Mitigation:**
-- Schema can mandate client signatures via `sign` or `sign_multi` fields
-- Backend always signs to establish authority
-- External notarization for legal requirements
+- Add signatures using standard libraries (ed25519, RSA, etc)
+- Store signatures separately from SAI chain
+- Example:
+  ```go
+  signature := ed25519.Sign(privateKey, saeBytes)
+  db.Store(ActionRecord{SAI: sai, SAE: sae, Signature: signature})
+  ```
 
 ### Trade-off 3: No Global Ordering
 
@@ -537,7 +582,7 @@ Both are **tools for integrity**, not coordination protocols.
 
 **Mitigation:**
 - Application-level causality tracking
-- External coordination layer
+- External coordination layer (Raft, Paxos)
 
 ### Trade-off 4: No Additional Entropy in SAI
 

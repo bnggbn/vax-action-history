@@ -38,16 +38,27 @@
 
 ## 2026-01-07
 
-### Added
-- **SAE Module** (`src/sae/`)
-  - `Envelope` interface: Semantic Action Envelope structure (action_type, timestamp, sdto, signature)
-  - `buildSAE()`: JCS-canonicalized SAE builder (matches Go's `sae.BuildSAE`)
-  - `signEnvelope()`: Ed25519 envelope signing (with Web Crypto API)
-  - `generateKeyPair()`: Ed25519 key pair generation
+### Removed
+- **Sign type support in SDTO** (reverted)
+  - Removed `"sign"` type from `FieldSpec` interface
+  - Removed `SupportedSignTypes` constant from `SchemaBuilder`
+  - Removed `setActionSign()` and `setActionSignMulti()` methods
+  - Removed `validateSign()` function from `FluentAction`
+  - Updated exports in `sdto/index.ts`
 
-- **Enhanced SDTO**
-  - `sign` type support in `FieldSpec` (for signature fields)
-  - `validateData()`: Server-side standalone validation function
+- **SAE signing functionality**
+  - Removed `signature?: Uint8Array` field from `Envelope` interface
+  - Removed `signEnvelope()` function
+  - Removed `generateKeyPair()` function
+
+- **VerifyAction signing**
+  - Removed `privateKey` parameter from `verifyAction()`
+  - Removed signature verification checks
+  - Removed `signEnvelope` import from `vax.ts`
+
+### Notes
+- Signature functionality removed to simplify the SDK architecture
+- Focus on core tamper-evident action history without embedded signing
   - `SupportedSignTypes` constant: `["ed25519", "rsa", "ecdsa"]`
   - `SchemaBuilder.setActionSign()`: Set single signature algorithm
   - `SchemaBuilder.setActionSignMulti()`: Set multiple allowed signature algorithms

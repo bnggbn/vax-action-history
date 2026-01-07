@@ -5,7 +5,7 @@
  */
 
 import { FieldSpec, validateData } from './sdto';
-import { Envelope, signEnvelope } from './sae';
+import { Envelope } from './sae';
 
 // ============================================================================
 // Constants
@@ -161,16 +161,14 @@ export async function computeGenesisSAI(
  * @param saeBytes - SAE bytes (JCS-canonicalized)
  * @param clientProvidedSAI - Client-computed SAI (32 bytes)
  * @param schema - Validation schema
- * @param privateKey - Ed25519 private key for signing (64 bytes)
- * @returns Promise<Envelope> - Signed envelope
+ * @returns Promise<Envelope> - Envelope
  */
 export async function verifyAction(
   expectedPrevSAI: Uint8Array,
   prevSAI: Uint8Array,
   saeBytes: Uint8Array,
   clientProvidedSAI: Uint8Array,
-  schema: Record<string, FieldSpec>,
-  privateKey: Uint8Array
+  schema: Record<string, FieldSpec>
 ): Promise<Envelope> {
   // Input validation
   if (expectedPrevSAI.length !== SAI_SIZE) {
@@ -192,11 +190,6 @@ export async function verifyAction(
     throw new InvalidInputError('invalid SAE JSON');
   }
 
-  // Check that SAE is unsigned (sign sae just for records that service provider can't massage the action)
-  if (envelope.signature !== undefined) {
-    throw new InvalidInputError('SAE must be unsigned');
-  }
-
   // Verify prevSAI matches
   if (!bytesEqual(prevSAI, expectedPrevSAI)) {
     throw new InvalidPrevSAIError();
@@ -216,8 +209,7 @@ export async function verifyAction(
     throw new SAIMismatchError();
   }
 
-  // All good - sign SAE to settle down the history
-  return signEnvelope(envelope, privateKey);
+  return envelope;
 }
 
 /**
