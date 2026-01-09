@@ -1,0 +1,85 @@
+name: VAX Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-go:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Run tests
+        run: |
+          cd go
+          go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./go/coverage.out
+          flags: go
+
+  test-c:
+    name: C Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OpenSSL
+        run: sudo apt-get install -y libssl-dev
+
+      - name: Build
+        run: |
+          cd c
+          make
+
+      - name: Run tests
+        run: |
+          cd c
+          make test
+
+  test-typescript:
+    name: TypeScript Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          cd typescript
+          npm ci
+
+      - name: Run tests
+        run: |
+          cd typescript
+          npm test
+
+      - name: Type check
+        run: |
+          cd typescript
+          npm run type-check
+
+  cross-language-verification:
+    name: Cross-language Test Vectors
+    needs: [test-go, test-c, test-typescript]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify test vectors match
+        run: |
+          # 比對三種語言的測試向量是否一致
+          ./scripts/verify-test-vectors.sh
