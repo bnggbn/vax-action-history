@@ -3,8 +3,6 @@
 #include <stdlib.h>
 #include <openssl/sha.h>
 
-// Forward declaration for internal function (defined in gi.c)
-vax_result_t vax_compute_gi(uint8_t* out_gi);
 
 #define VAX_SAI_LABEL "VAX-SAI"
 #define VAX_SAI_LABEL_LEN 7
@@ -23,21 +21,14 @@ vax_result_t vax_compute_sai(
     uint8_t sae_hash[VAX_SAI_SIZE];
     SHA256(sae_bytes, sae_len, sae_hash);
 
-    //generate gi
-    uint8_t gi[VAX_GI_SIZE];
-    vax_result_t result = vax_compute_gi(gi);
-    if (result != VAX_OK) {
-        return result;
-    }
 
     // message = "VAX-SAI" || prevSAI || sae_hash || gi
-    uint8_t message[VAX_SAI_LABEL_LEN + VAX_SAI_SIZE + VAX_SAI_SIZE + VAX_GI_SIZE];
+    uint8_t message[VAX_SAI_LABEL_LEN + VAX_SAI_SIZE + VAX_SAI_SIZE ];
     size_t off = 0;
 
     memcpy(message + off, VAX_SAI_LABEL, VAX_SAI_LABEL_LEN); off += VAX_SAI_LABEL_LEN;
     memcpy(message + off, prev_sai, VAX_SAI_SIZE);           off += VAX_SAI_SIZE;
     memcpy(message + off, sae_hash, VAX_SAI_SIZE);           off += VAX_SAI_SIZE;
-    memcpy(message + off, gi, VAX_GI_SIZE);                  off += VAX_GI_SIZE;
 
     SHA256(message, sizeof(message), out_sai);
     return VAX_OK;

@@ -124,17 +124,13 @@ void test_sai_basic(void) {
     const char* sae = "{\"action\":\"test\",\"value\":42}";
     size_t sae_len = strlen(sae);
 
-    uint8_t gi[VAX_GI_SIZE] = {0};
-    memset(gi, 0x22, VAX_GI_SIZE);
-
     uint8_t sai[VAX_SAI_SIZE];
 
-    vax_result_t result = vax_compute_sai(prev_sai, (const uint8_t*)sae, sae_len, gi, sai);
+    vax_result_t result = vax_compute_sai(prev_sai, (const uint8_t*)sae, sae_len, sai);
     assert(result == VAX_OK);
 
     print_hex("prevSAI", prev_sai, VAX_SAI_SIZE);
     printf("SAE: %s (len=%zu)\n", sae, sae_len);
-    print_hex("gi     ", gi, VAX_GI_SIZE);
     print_hex("SAI    ", sai, VAX_SAI_SIZE);
 
     printf("✓ sai_basic: produced 32-byte SAI\n");
@@ -146,13 +142,12 @@ void test_sai_deterministic(void) {
 
     uint8_t prev_sai[VAX_SAI_SIZE] = {0};
     const char* sae = "{\"test\":1}";
-    uint8_t gi[VAX_GI_SIZE] = {0};
 
     uint8_t sai1[VAX_SAI_SIZE];
     uint8_t sai2[VAX_SAI_SIZE];
 
-    vax_compute_sai(prev_sai, (const uint8_t*)sae, strlen(sae), gi, sai1);
-    vax_compute_sai(prev_sai, (const uint8_t*)sae, strlen(sae), gi, sai2);
+    vax_compute_sai(prev_sai, (const uint8_t*)sae, strlen(sae), sai1);
+    vax_compute_sai(prev_sai, (const uint8_t*)sae, strlen(sae), sai2);
 
     assert(memcmp(sai1, sai2, VAX_SAI_SIZE) == 0);
     printf("✓ sai_deterministic: same input produces same SAI\n");
@@ -163,7 +158,6 @@ void test_sai_different_sae(void) {
     printf("\n=== Test: vax_compute_sai (different SAE) ===\n");
 
     uint8_t prev_sai[VAX_SAI_SIZE] = {0};
-    uint8_t gi[VAX_GI_SIZE] = {0};
 
     const char* sae1 = "{\"action\":\"test1\"}";
     const char* sae2 = "{\"action\":\"test2\"}";
@@ -171,8 +165,8 @@ void test_sai_different_sae(void) {
     uint8_t sai1[VAX_SAI_SIZE];
     uint8_t sai2[VAX_SAI_SIZE];
 
-    vax_compute_sai(prev_sai, (const uint8_t*)sae1, strlen(sae1), gi, sai1);
-    vax_compute_sai(prev_sai, (const uint8_t*)sae2, strlen(sae2), gi, sai2);
+    vax_compute_sai(prev_sai, (const uint8_t*)sae1, strlen(sae1), sai1);
+    vax_compute_sai(prev_sai, (const uint8_t*)sae2, strlen(sae2), sai2);
 
     assert(memcmp(sai1, sai2, VAX_SAI_SIZE) != 0);
     printf("✓ sai_different_sae: different SAE produces different SAI\n");
