@@ -34,18 +34,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install OpenSSL
-        run: sudo apt-get install -y libssl-dev
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev cmake
 
-      - name: Build
+      - name: Build and test
         run: |
           cd c
-          make
-
-      - name: Run tests
-        run: |
-          cd c
-          make test
+          cmake -B build
+          cmake --build build
+          ctest --test-dir build --output-on-failure
 
   test-typescript:
     name: TypeScript Tests
@@ -59,27 +56,28 @@ jobs:
 
       - name: Install dependencies
         run: |
-          cd typescript
+          cd ts
           npm ci
 
       - name: Run tests
         run: |
-          cd typescript
+          cd ts
           npm test
 
-      - name: Type check
+      - name: Build
         run: |
-          cd typescript
-          npm run type-check
+          cd ts
+          npm run build
 
-  cross-language-verification:
-    name: Cross-language Test Vectors
-    needs: [test-go, test-c, test-typescript]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Verify test vectors match
-        run: |
-          # 比對三種語言的測試向量是否一致
-          ./scripts/verify-test-vectors.sh
+  # TODO: Add cross-language verification when scripts/verify-test-vectors.sh is ready
+  # cross-language-verification:
+  #   name: Cross-language Test Vectors
+  #   needs: [test-go, test-c, test-typescript]
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Verify test vectors match
+  #       run: |
+  #         # Run cross-language JCS tests
+  #         cd go && go test ./pkg/vax/jcs/jcs_cross_lang_test.go
+  #         cd ../ts && npm test -- jcs.cross-lang.test.ts
