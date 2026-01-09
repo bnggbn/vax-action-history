@@ -7,7 +7,7 @@
 vax_result_t vax_compute_gi(uint8_t* out_gi);
 
 // Test 1: vax_compute_gi basic - produces 32 bytes
-void test_gi_basic() {
+void test_gi_basic(void) {
     printf("\n=== Test: vax_compute_gi (basic) ===\n");
 
     uint8_t gi[VAX_GI_SIZE];
@@ -21,7 +21,7 @@ void test_gi_basic() {
 }
 
 // Test 2: vax_compute_gi randomness - each call produces different output
-void test_gi_randomness() {
+void test_gi_randomness(void) {
     printf("\n=== Test: vax_compute_gi (randomness) ===\n");
 
     uint8_t gi1[VAX_GI_SIZE];
@@ -40,7 +40,7 @@ void test_gi_randomness() {
 }
 
 // Test 3: vax_compute_gi error handling
-void test_gi_error_handling() {
+void test_gi_error_handling(void) {
     printf("\n=== Test: vax_compute_gi (error handling) ===\n");
 
     // NULL output
@@ -51,7 +51,7 @@ void test_gi_error_handling() {
 }
 
 // Test 4: vax_compute_gi non-zero output
-void test_gi_non_zero() {
+void test_gi_non_zero(void) {
     printf("\n=== Test: vax_compute_gi (non-zero) ===\n");
 
     uint8_t gi[VAX_GI_SIZE];
@@ -66,7 +66,7 @@ void test_gi_non_zero() {
 }
 
 // Test 5: vax_compute_gi multiple calls
-void test_gi_multiple_calls() {
+void test_gi_multiple_calls(void) {
     printf("\n=== Test: vax_compute_gi (multiple calls) ===\n");
 
     const int NUM_CALLS = 10;

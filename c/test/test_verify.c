@@ -9,7 +9,7 @@
 
 
 // Test 1: verify valid action (prevSAI matches)
-void test_verify_valid_action() {
+void test_verify_valid_action(void) {
     printf("\n=== Test: vax_verify_action (valid) ===\n");
 
     uint8_t expected_prev_sai[VAX_SAI_SIZE];
@@ -26,7 +26,7 @@ void test_verify_valid_action() {
 }
 
 // Test 2: verify invalid prevSAI
-void test_verify_invalid_prev_sai() {
+void test_verify_invalid_prev_sai(void) {
     printf("\n=== Test: vax_verify_action (invalid prevSAI) ===\n");
 
     uint8_t expected_prev_sai[VAX_SAI_SIZE];
@@ -42,7 +42,7 @@ void test_verify_invalid_prev_sai() {
 }
 
 // Test 3: verify NULL handling
-void test_verify_null_handling() {
+void test_verify_null_handling(void) {
     printf("\n=== Test: vax_verify_action (NULL handling) ===\n");
 
     uint8_t prev_sai[VAX_SAI_SIZE];

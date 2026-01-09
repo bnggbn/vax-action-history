@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 
 // Helper: print hex
 static inline void print_hex(const char* label, const uint8_t* data, size_t len) {

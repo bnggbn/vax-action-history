@@ -7,7 +7,7 @@
 // This suite verifies hashing / chaining semantics, not JSON canonicalization.
 
 // Test 1: vax_compute_genesis_sai
-void test_genesis_sai() {
+void test_genesis_sai(void) {
     printf("\n=== Test: vax_compute_genesis_sai ===\n");
 
     const char* actor_id = "user123:device456";
@@ -47,7 +47,7 @@ void test_genesis_sai() {
 }
 
 // Test 2: vax_compute_sai basic
-void test_sai_basic() {
+void test_sai_basic(void) {
     printf("\n=== Test: vax_compute_sai (basic) ===\n");
 
     uint8_t prev_sai[VAX_SAI_SIZE] = {0};
@@ -69,7 +69,7 @@ void test_sai_basic() {
 }
 
 // Test 3: vax_compute_sai randomness (gi is random internally)
-void test_sai_randomness() {
+void test_sai_randomness(void) {
     printf("\n=== Test: vax_compute_sai (randomness) ===\n");
 
     uint8_t prev_sai[VAX_SAI_SIZE] = {0};
@@ -87,7 +87,7 @@ void test_sai_randomness() {
 }
 
 // Test 4: Full chain simulation
-void test_chain_simulation() {
+void test_chain_simulation(void) {
     printf("\n=== Test: Chain simulation ===\n");
 
     // Setup
@@ -122,7 +122,7 @@ void test_chain_simulation() {
 }
 
 // Test 5: SAI error handling
-void test_sai_error_handling() {
+void test_sai_error_handling(void) {
     printf("\n=== Test: vax_compute_sai (error handling) ===\n");
 
     uint8_t prev_sai[VAX_SAI_SIZE] = {0};

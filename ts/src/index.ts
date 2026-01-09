@@ -33,8 +33,6 @@ export {
 export {
   Envelope,
   buildSAE,
-  signEnvelope,
-  generateKeyPair,
 } from './sae';
 
 // SDTO - Schema-Driven Type Objects
@@ -46,5 +44,4 @@ export {
   validateData,
   SchemaBuilder,
   newSchemaBuilder,
-  SupportedSignTypes,
 } from './sdto';
