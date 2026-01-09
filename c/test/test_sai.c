@@ -68,9 +68,9 @@ void test_sai_basic(void) {
     printf("✓ sai_basic: produced 32-byte SAI\n");
 }
 
-// Test 3: vax_compute_sai randomness (gi is random internally)
+// Test 3: vax_compute_sai randomness (deterministic test)
 void test_sai_randomness(void) {
-    printf("\n=== Test: vax_compute_sai (randomness) ===\n");
+    printf("\n=== Test: vax_compute_sai (deterministic test) ===\n");
 
     uint8_t prev_sai[VAX_SAI_SIZE] = {0};
     const char* sae = "{\"test\":1}";
@@ -78,12 +78,12 @@ void test_sai_randomness(void) {
     uint8_t sai1[VAX_SAI_SIZE];
     uint8_t sai2[VAX_SAI_SIZE];
 
-    // Since gi is generated randomly inside, same inputs produce different outputs
+    // Updated logic: deterministic output for same inputs
     vax_compute_sai(prev_sai, (const uint8_t*)sae, strlen(sae), sai1);
     vax_compute_sai(prev_sai, (const uint8_t*)sae, strlen(sae), sai2);
 
-    assert(memcmp(sai1, sai2, VAX_SAI_SIZE) != 0);
-    printf("✓ sai_randomness: same input produces different SAI (random gi)\n");
+    assert(memcmp(sai1, sai2, VAX_SAI_SIZE) == 0);
+    printf("\u2713 sai_randomness: same input produces same SAI\n");
 }
 
 // Test 4: Full chain simulation
