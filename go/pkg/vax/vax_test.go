@@ -7,9 +7,9 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"vax/pkg/vax/jcs"
-	"vax/pkg/vax/sae"
-	"vax/pkg/vax/sdto"
+	"github.com/bnggbn/vax-action-history/go/pkg/vax/jcs"
+	"github.com/bnggbn/vax-action-history/go/pkg/vax/sae"
+	"github.com/bnggbn/vax-action-history/go/pkg/vax/sdto"
 )
 
 // Test vectors (matching C test suite)

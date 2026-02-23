@@ -1,5 +1,5 @@
 {
-  "name": "vax-jcs",
+  "name": "vax-sdk",
   "version": "0.1.0",
   "description": "VAX JSON Canonicalization Scheme (JCS) - TypeScript implementation",
   "main": "dist/index.js",

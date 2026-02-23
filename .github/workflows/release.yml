@@ -1,0 +1,141 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write  # needed to create GitHub releases and push tags
+
+jobs:
+  # ─── Gate: all tests must pass before any release step ───────────────────────
+  test-go:
+    name: Go Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache-dependency-path: go/go.sum
+
+      - name: Run tests
+        run: |
+          cd go
+          go test -v -race ./...
+
+  test-c:
+    name: C Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev cmake
+
+      - name: Build and test
+        run: |
+          cd c
+          cmake -B build
+          cmake --build build
+          ctest --test-dir build --output-on-failure
+
+  test-typescript:
+    name: TypeScript Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: cd ts && npm ci
+
+      - name: Run tests
+        run: cd ts && npm test
+
+      - name: Build
+        run: cd ts && npm run build
+
+  # ─── Publish TypeScript to npm ───────────────────────────────────────────────
+  release-npm:
+    name: Publish to npm
+    needs: [test-go, test-c, test-typescript]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: cd ts && npm ci
+
+      - name: Build
+        run: cd ts && npm run build
+
+      - name: Set version from tag
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          cd ts && npm version "$VERSION" --no-git-tag-version
+
+      - name: Publish to npm
+        run: cd ts && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ─── Tag Go module (subdirectory module proxy convention) ────────────────────
+  tag-go:
+    name: Tag Go module
+    needs: [test-go, test-c, test-typescript]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push go/ prefixed tag for Go module proxy
+        run: |
+          GO_TAG="go/${GITHUB_REF_NAME}"
+          git tag "$GO_TAG"
+          git push origin "$GO_TAG"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
+  # ─── Create GitHub Release ───────────────────────────────────────────────────
+  github-release:
+    name: Create GitHub Release
+    needs: [release-npm, tag-go]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          AUTO_NOTES="$(gh api "repos/${{ github.repository }}/releases/generate-notes" \
+            -f tag_name="${GITHUB_REF_NAME}" \
+            --jq '.body' 2>/dev/null || true)"
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "Release ${GITHUB_REF_NAME}" \
+            --notes "## Install
+
+          **TypeScript / Node.js**
+          \`\`\`bash
+          npm install vax-sdk@${VERSION}
+          \`\`\`
+
+          **Go**
+          \`\`\`bash
+          go get github.com/bnggbn/vax-action-history/go@${GITHUB_REF_NAME}
+          \`\`\`
+
+          ---
+
+          ${AUTO_NOTES}"

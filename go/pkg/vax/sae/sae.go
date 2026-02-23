@@ -3,7 +3,7 @@ package sae
 import (
 	"time"
 
-	"vax/pkg/vax/jcs"
+	"github.com/bnggbn/vax-action-history/go/pkg/vax/jcs"
 )
 
 type Envelope struct {

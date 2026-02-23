@@ -4,8 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"vax/pkg/vax/sae"
-	"vax/pkg/vax/sdto"
+	"github.com/bnggbn/vax-action-history/go/pkg/vax/sae"
+	"github.com/bnggbn/vax-action-history/go/pkg/vax/sdto"
 )
 
 // Error codes

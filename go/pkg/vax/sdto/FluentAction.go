@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"strconv"
 
-	"vax/pkg/vax/sae"
+	"github.com/bnggbn/vax-action-history/go/pkg/vax/sae"
 )
 
 // FluentAction 是你給 Consumer 的「量尺」
