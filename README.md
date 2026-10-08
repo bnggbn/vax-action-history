@@ -381,3 +381,7 @@ Inspired by:
 **VAX = Verifiable Action eXchange**
 
 Not a protocol. Not a system. Just a tool.
+
+## Optional Go storage companion
+
+[storage/](storage/README.md) is an independently versioned, standard-library-only content-addressed storage SDK. It provides UTF-8 text trees, opaque blobs, bounded catalogs and byte verification. The VAX core remains independent of storage, authorization and transport. Install with `go get github.com/bnggbn/vax-action-history/storage@v0.1.0`; storage tags use `storage/vX.Y.Z` and do not publish C or npm packages. PFCO/PFCA formats remain compatible with Pageforge. This initial companion is Go-only.

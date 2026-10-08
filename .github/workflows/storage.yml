@@ -1,0 +1,32 @@
+name: Storage SDK
+
+on:
+  push:
+    branches: [main, feature/storage-sdk]
+    tags: ['storage/v*']
+    paths: ['storage/**', '.github/workflows/storage.yml']
+  pull_request:
+    branches: [main]
+    paths: ['storage/**', '.github/workflows/storage.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        go: ['1.23.x', '1.26.x']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false
+      - name: Test and vet storage
+        working-directory: storage
+        run: |
+          go test ./...
+          go vet ./...

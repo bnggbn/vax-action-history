@@ -729,3 +729,7 @@ It achieves this by explicitly **not** attempting to:
 VAX is a **tool**, not a **protocol**.
 
 Use it where **integrity matters** and **simplicity is valuable**.
+
+## Optional storage companion (2026-10-08)
+
+The core non-goals above describe the cryptographic SDK. The independently versioned `storage/` Go module is an optional implementation choice for consumers, not a mandatory storage protocol. Core modules do not depend on it. It does not interpret event or application schemas, supply authorization or coordinate writers. Existing PFCO/PFCA bytes are retained; see [storage responsibilities and limits](../storage/README.md). No C/TypeScript storage mirror is included in this extraction.

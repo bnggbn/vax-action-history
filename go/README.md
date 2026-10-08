@@ -463,3 +463,7 @@ MIT License
 >
 > We provide primitives.
 > You decide how to use them.
+
+## Optional storage companion
+
+The separate [storage module](../storage/README.md) provides content-addressed text/blob storage. This cryptographic module does not import it; consumers pin it independently. Its byte formats and storage errors are separate from VAX canonical event bytes and SAI.

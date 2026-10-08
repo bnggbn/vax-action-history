@@ -185,3 +185,7 @@ VAX intentionally does **not** provide:
 - ❌ Key management (use your KMS)
 - ❌ Cross-actor consensus (single-actor linear history only)
 
+
+## Optional storage module
+
+`storage/` is a separate Go-only companion module, versioned with `storage/vX.Y.Z`. Core Go/C/TS cryptographic behavior is unchanged and must not depend on it. The module preserves existing PFCO/PFCA bytes and accepts opaque blobs; do not canonicalize or reinterpret persisted payloads during extraction. JCS rules above apply to VAX events, not opaque storage payloads or fixture JSON. No application/internal imports or HTTP error codes belong in this module. Tests must use temporary storage. Backend comments and diagnostics use English. Go/C/TS storage parity is future work, not a claim of this release.
