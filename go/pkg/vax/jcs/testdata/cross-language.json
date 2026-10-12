@@ -1,0 +1,66 @@
+[
+  {
+    "name": "basic types",
+    "input": {
+      "b": 2,
+      "a": 1,
+      "c": null,
+      "d": true
+    },
+    "expected": "{\"a\":1,\"b\":2,\"c\":null,\"d\":true}"
+  },
+  {
+    "name": "unicode string",
+    "input": "你好世界",
+    "expected": "\"\\u4f60\\u597d\\u4e16\\u754c\""
+  },
+  {
+    "name": "emoji",
+    "input": "😀🎉",
+    "expected": "\"\\ud83d\\ude00\\ud83c\\udf89\""
+  },
+  {
+    "name": "UTF-16 key order: emoji before fullwidth punctuation",
+    "input": {
+      "！": 1,
+      "😀": 2
+    },
+    "expected": "{\"\\ud83d\\ude00\":2,\"\\uff01\":1}"
+  },
+  {
+    "name": "UTF-16 key order: BMP and supplementary boundaries",
+    "input": {
+      "￿": 7,
+      "": 6,
+      "퟿": 2,
+      "😀": 4,
+      "𐀀": 3,
+      "􏿿": 5,
+      "a": 1
+    },
+    "expected": "{\"a\":1,\"\\ud7ff\":2,\"\\ud800\\udc00\":3,\"\\ud83d\\ude00\":4,\"\\udbff\\udfff\":5,\"\\ue000\":6,\"\\uffff\":7}"
+  },
+  {
+    "name": "UTF-16 key order: prefixes and shared high surrogate",
+    "input": {
+      "😀z": 4,
+      "😁": 5,
+      "😀a": 3,
+      "😀": 2,
+      "": 1
+    },
+    "expected": "{\"\":1,\"\\ud83d\\ude00\":2,\"\\ud83d\\ude00a\":3,\"\\ud83d\\ude00z\":4,\"\\ud83d\\ude01\":5}"
+  },
+  {
+    "name": "UTF-16 key order: nested objects in arrays",
+    "input": [
+      {
+        "x": {
+          "！": 1,
+          "😀": 2
+        }
+      }
+    ],
+    "expected": "[{\"x\":{\"\\ud83d\\ude00\":2,\"\\uff01\":1}}]"
+  }
+]

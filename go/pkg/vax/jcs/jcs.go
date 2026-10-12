@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf16"
@@ -102,7 +102,7 @@ func writeCanonicalObject(buf *bytes.Buffer, m map[string]any) error {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.SortFunc(keys, compareUTF16)
 
 	for i, k := range keys {
 		if i > 0 {
@@ -117,6 +117,32 @@ func writeCanonicalObject(buf *bytes.Buffer, m map[string]any) error {
 
 	buf.WriteByte('}')
 	return nil
+}
+
+// Compare unescaped keys as UTF-16 code units, matching JavaScript sort.
+// Rune order agrees except for supplementary characters versus BMP characters
+// above the surrogate range. Compare their high surrogates first; equal high
+// surrogates retain rune order. This avoids allocating UTF-16 slices per key.
+func compareUTF16(a, b string) int {
+	for len(a) > 0 && len(b) > 0 {
+		ar, an := utf8.DecodeRuneInString(a)
+		br, bn := utf8.DecodeRuneInString(b)
+		if ar != br {
+			au, bu := ar, br
+			if ar >= 0x10000 {
+				au = 0xd800 + ((ar - 0x10000) >> 10)
+			}
+			if br >= 0x10000 {
+				bu = 0xd800 + ((br - 0x10000) >> 10)
+			}
+			if au != bu {
+				return int(au - bu)
+			}
+			return int(ar - br)
+		}
+		a, b = a[an:], b[bn:]
+	}
+	return len(a) - len(b)
 }
 
 func writeCanonicalArray(buf *bytes.Buffer, arr []any) error {

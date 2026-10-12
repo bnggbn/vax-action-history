@@ -4,6 +4,19 @@ Pure Go implementation of VAX cryptographic primitives.
 
 Zero dependencies. Deterministic output.
 
+## Canonicalization compatibility
+
+Go module tag `go/v0.0.1` corrects VAX-JCS object key order to unescaped UTF-16
+code units, matching TypeScript. VAX-specific ASCII escaping and decimal-number
+rules remain unchanged. ASCII-key histories are byte-compatible; histories made
+with `go/v0.0.0` can differ when keys mix supplementary characters and high BMP
+characters. Retain original SAE bytes and the encoder version for those histories;
+do not silently rewrite hashes. See [the compatibility correction](../docs/SPECIFICATION.md#211-go-canonicalization-compatibility-correction).
+
+Go tests always run the module-packaged golden vectors, including when testing a
+downloaded release. In a repository checkout they also verify that this fixture
+matches the shared root `test-vectors.json` consumed by TypeScript.
+
 ---
 
 ## Installation

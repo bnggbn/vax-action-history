@@ -1,11 +1,20 @@
 package jcs
 
 import (
+	"bytes"
+	_ "embed"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 )
+
+// The module ships its vectors so published-module tests cannot silently skip.
+// Repository tests also require the shared Go/TS fixture to match this copy.
+//
+//go:embed testdata/cross-language.json
+var crossLanguageVectors []byte
 
 type TestVector struct {
 	Name     string          `json:"name"`
@@ -14,35 +23,30 @@ type TestVector struct {
 }
 
 func TestCrossLanguageCompatibility(t *testing.T) {
-	// Read test vectors from root directory
-	vectorPath := filepath.Join("..", "..", "test-vectors.json")
-	data, err := os.ReadFile(vectorPath)
-	if err != nil {
-		t.Skipf("Skipping cross-lang test: cannot read test-vectors.json: %v", err)
-		return
+	root := filepath.Join("..", "..", "..", "..")
+	if _, err := os.Stat(filepath.Join(root, "ts", "package.json")); err == nil {
+		data, err := os.ReadFile(filepath.Join(root, "test-vectors.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(data, crossLanguageVectors) {
+			t.Fatal("shared and module-packaged test vectors differ")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
 	}
-
 	var vectors []TestVector
-	if err := json.Unmarshal(data, &vectors); err != nil {
-		t.Fatalf("Failed to parse test vectors: %v", err)
+	if err := json.Unmarshal(crossLanguageVectors, &vectors); err != nil {
+		t.Fatal(err)
 	}
-
-	for _, v := range vectors {
-		t.Run(v.Name, func(t *testing.T) {
-			// Parse input
-			var input interface{}
-			if err := json.Unmarshal(v.Input, &input); err != nil {
-				t.Fatalf("Failed to parse input: %v", err)
-			}
-
-			// Marshal using our JCS implementation
-			got, err := Marshal(input)
+	for _, vector := range vectors {
+		t.Run(vector.Name, func(t *testing.T) {
+			got, err := CanonicalizeJSON(vector.Input)
 			if err != nil {
-				t.Fatalf("Marshal failed: %v", err)
+				t.Fatal(err)
 			}
-
-			if string(got) != v.Expected {
-				t.Errorf("\ngot:  %q\nwant: %q", string(got), v.Expected)
+			if string(got) != vector.Expected {
+				t.Errorf("got: %q; want: %q", got, vector.Expected)
 			}
 		})
 	}

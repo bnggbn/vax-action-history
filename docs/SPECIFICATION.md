@@ -73,12 +73,28 @@ SAE is the canonical JSON representation of an action.
 **Format Requirements:**
 - Encoding: UTF-8
 - Whitespace: None
-- Key ordering: Lexicographic (byte-order)
+- Key ordering: Lexicographic over unescaped UTF-16 code units (JavaScript string order); no locale collation
 - Numbers: No scientific notation
 - Unicode: NFC normalization required
 - Non-ASCII: Escaped as UTF-16 code units (`\uXXXX`)
 
 ---
+
+### 2.1.1 Go canonicalization compatibility correction
+
+Go SDK go/v0.0.1 corrects key ordering to match the existing TypeScript implementation.
+The previous Go SDK go/v0.0.0 sorted UTF-8 bytes, contrary to JavaScript UTF-16 ordering.
+For example, \uD83D\uDE00 (emoji) precedes \uFF01 (fullwidth punctuation).
+This changes SAE bytes, and therefore SAI, when supplementary-character keys and
+high-BMP keys occur together. ASCII keys and Unicode string values are unchanged.
+The older byte-order wording above was inaccurate for the TypeScript implementation.
+
+This remains VAX-JCS, with ASCII-only output, UTF-16 escapes and decimal numbers;
+it is not a switch to a generic RFC 8785 encoder. No new normalization behavior
+is introduced by this correction. Do not recanonicalize existing SAE or silently
+rewrite stored hashes. Applications with affected old Go histories must retain
+their original SAE bytes and encoder version, or explicitly migrate to a new chain.
+The shared test vectors cover boundary keys, prefixes and nested objects.
 
 ### 2.2 SAI (Semantic Action Identifier)
 
