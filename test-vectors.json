@@ -20,15 +20,15 @@
     "expected": "\"\\ud83d\\ude00\\ud83c\\udf89\""
   },
   {
-    "name": "UTF-16 key order: emoji before fullwidth punctuation",
+    "name": "UTF-8 key order: fullwidth punctuation before emoji",
     "input": {
       "！": 1,
       "😀": 2
     },
-    "expected": "{\"\\ud83d\\ude00\":2,\"\\uff01\":1}"
+    "expected": "{\"\\uff01\":1,\"\\ud83d\\ude00\":2}"
   },
   {
-    "name": "UTF-16 key order: BMP and supplementary boundaries",
+    "name": "UTF-8 key order: BMP and supplementary boundaries",
     "input": {
       "￿": 7,
       "": 6,
@@ -38,10 +38,10 @@
       "􏿿": 5,
       "a": 1
     },
-    "expected": "{\"a\":1,\"\\ud7ff\":2,\"\\ud800\\udc00\":3,\"\\ud83d\\ude00\":4,\"\\udbff\\udfff\":5,\"\\ue000\":6,\"\\uffff\":7}"
+    "expected": "{\"a\":1,\"\\ud7ff\":2,\"\\ue000\":6,\"\\uffff\":7,\"\\ud800\\udc00\":3,\"\\ud83d\\ude00\":4,\"\\udbff\\udfff\":5}"
   },
   {
-    "name": "UTF-16 key order: prefixes and shared high surrogate",
+    "name": "UTF-8 key order: prefixes and nearby supplementary characters",
     "input": {
       "😀z": 4,
       "😁": 5,
@@ -52,7 +52,7 @@
     "expected": "{\"\":1,\"\\ud83d\\ude00\":2,\"\\ud83d\\ude00a\":3,\"\\ud83d\\ude00z\":4,\"\\ud83d\\ude01\":5}"
   },
   {
-    "name": "UTF-16 key order: nested objects in arrays",
+    "name": "UTF-8 key order: nested objects in arrays",
     "input": [
       {
         "x": {
@@ -61,6 +61,15 @@
         }
       }
     ],
-    "expected": "[{\"x\":{\"\\ud83d\\ude00\":2,\"\\uff01\":1}}]"
+    "expected": "[{\"x\":{\"\\uff01\":1,\"\\ud83d\\ude00\":2}}]"
+  },
+  {
+    "name": "UTF-8 key order: integer-looking keys remain lexical",
+    "input": {
+      "1": 1,
+      "2": 2,
+      "10": 10
+    },
+    "expected": "{\"1\":1,\"10\":10,\"2\":2}"
   }
 ]

@@ -25,25 +25,30 @@ describe('Property-based tests', () => {
     );
   });
 
- test('object keys always sorted (textual order)', () => {
-  fc.assert(
-    fc.property(
-      fc.dictionary(fc.string(), fc.oneof(fc.constant(null), fc.boolean(), fc.integer())),
-      (obj) => {
-        const canonical = marshal(obj).toString();
-
-        // 抽出 JSON text 中的 key 順序（簡單 regex 版）
-        const keysInText = [...canonical.matchAll(/"((?:[^"\\]|\\.)*)":/g)]
-          .map(m => JSON.parse(`"${m[1]}"`));
-
-        const expected = Object.keys(obj).sort();
-
-        expect(keysInText).toEqual(expected);
-      }
-    )
-  );
-});
-
+  test('valid Unicode object keys follow UTF-8 byte order', () => {
+    fc.assert(
+      fc.property(
+        fc.dictionary(fc.fullUnicodeString(), fc.integer()),
+        (obj) => {
+          const canonical = marshal(obj).toString();
+          const keysInText = [...canonical.matchAll(/"((?:[^"\\]|\\.)*)":/g)]
+            .map(match => JSON.parse(`"${match[1]}"`));
+          // Valid UTF-8 preserves scalar-value order. Use a scalar reference
+          // independently of the production Buffer comparator.
+          const expected = Object.keys(obj).sort((a, b) => {
+            const left = Array.from(a, char => char.codePointAt(0)!);
+            const right = Array.from(b, char => char.codePointAt(0)!);
+            for (let i = 0; i < Math.min(left.length, right.length); i++) {
+              if (left[i] !== right[i]) return left[i] - right[i];
+            }
+            return left.length - right.length;
+          });
+          expect(keysInText).toEqual(expected);
+        }
+      ),
+      { numRuns: 200 }
+    );
+  });
 
   test('no whitespace in output', () => {
     fc.assert(

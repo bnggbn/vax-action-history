@@ -10,7 +10,7 @@
 - N/A
 
 ### Fixed
-- N/A
+- VAX-JCS key ordering now compares unescaped UTF-8 bytes, matching the Go reference and original byte-order specification. Unicode-key output can differ from previous TS releases; retain original SAE bytes and encoder versions for old chains. ASCII-key output is unchanged.
 
 ---
 

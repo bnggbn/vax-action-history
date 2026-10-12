@@ -73,28 +73,32 @@ SAE is the canonical JSON representation of an action.
 **Format Requirements:**
 - Encoding: UTF-8
 - Whitespace: None
-- Key ordering: Lexicographic over unescaped UTF-16 code units (JavaScript string order); no locale collation
+- Key ordering: Lexicographic over unescaped UTF-8 bytes of valid Unicode keys; no locale collation
 - Numbers: No scientific notation
 - Unicode: NFC normalization required
 - Non-ASCII: Escaped as UTF-16 code units (`\uXXXX`)
 
 ---
 
-### 2.1.1 Go canonicalization compatibility correction
+### 2.1.1 Canonicalization compatibility correction
 
-Go SDK go/v0.0.1 corrects key ordering to match the existing TypeScript implementation.
-The previous Go SDK go/v0.0.0 sorted UTF-8 bytes, contrary to JavaScript UTF-16 ordering.
-For example, \uD83D\uDE00 (emoji) precedes \uFF01 (fullwidth punctuation).
-This changes SAE bytes, and therefore SAI, when supplementary-character keys and
-high-BMP keys occur together. ASCII keys and Unicode string values are unchanged.
-The older byte-order wording above was inaccurate for the TypeScript implementation.
+The original Go reference and byte-order contract determine key order. Go SDK
+go/v0.0.2 restores the original go/v0.0.0 UTF-8 byte order. TypeScript now explicitly
+sorts UTF-8 bytes instead of JavaScript's default UTF-16 string order. For example,
+\uFF01 (fullwidth punctuation) precedes \uD83D\uDE00 (emoji).
 
-This remains VAX-JCS, with ASCII-only output, UTF-16 escapes and decimal numbers;
-it is not a switch to a generic RFC 8785 encoder. No new normalization behavior
-is introduced by this correction. Do not recanonicalize existing SAE or silently
-rewrite stored hashes. Applications with affected old Go histories must retain
-their original SAE bytes and encoder version, or explicitly migrate to a new chain.
-The shared test vectors cover boundary keys, prefixes and nested objects.
+The intermediate Go SDK go/v0.0.1 changed the reference in the wrong direction;
+its published tag remains immutable. Histories with affected Unicode keys made
+using go/v0.0.1 or the earlier TypeScript encoder retain their original SAE bytes
+and encoder version, or explicitly migrate into a new chain. Do not silently
+recanonicalize existing SAE or rewrite stored hashes. ASCII-key output and Unicode
+values are unchanged. The shared vectors cover boundaries, prefixes, nested
+objects and integer-looking keys.
+
+VAX-JCS retains its ASCII-only output, UTF-16 string escapes and decimal-number
+rules. Key order is applied before escaping; UTF-16 escaping does not imply
+UTF-16 sorting. This is not a switch to a generic RFC 8785 encoder, and introduces
+no new normalization behavior. Cross-language key vectors use valid Unicode.
 
 ### 2.2 SAI (Semantic Action Identifier)
 

@@ -40,10 +40,17 @@ function writeCanonicalValue(out: string[], value: unknown): void {
 
 function writeCanonicalObject(out: string[], obj: Record<string, unknown>): void {
   out.push('{');
-  const keys = Object.keys(obj).sort();
+  // Sort unescaped UTF-8 bytes, matching the Go reference. Encode once per key.
+  const keys = Object.keys(obj).map(key => ({ key, bytes: Buffer.from(key, 'utf8') }));
+  keys.sort((a, b) => {
+    const order = Buffer.compare(a.bytes, b.bytes);
+    if (order !== 0) return order;
+    // Keep deterministic output for distinct malformed keys with equal replacement bytes.
+    return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+  });
   for (let i = 0; i < keys.length; i++) {
     if (i > 0) out.push(',');
-    const key = keys[i];
+    const key = keys[i].key;
     writeJSONString(out, key);
     out.push(':');
     writeCanonicalValue(out, obj[key]);

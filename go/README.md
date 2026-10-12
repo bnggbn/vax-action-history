@@ -6,16 +6,16 @@ Zero dependencies. Deterministic output.
 
 ## Canonicalization compatibility
 
-Go module tag `go/v0.0.1` corrects VAX-JCS object key order to unescaped UTF-16
-code units, matching TypeScript. VAX-specific ASCII escaping and decimal-number
-rules remain unchanged. ASCII-key histories are byte-compatible; histories made
-with `go/v0.0.0` can differ when keys mix supplementary characters and high BMP
-characters. Retain original SAE bytes and the encoder version for those histories;
-do not silently rewrite hashes. See [the compatibility correction](../docs/SPECIFICATION.md#211-go-canonicalization-compatibility-correction).
+Go module tag `go/v0.0.2` restores UTF-8 byte ordering of unescaped keys, as in
+`go/v0.0.0` and the original specification. TypeScript now follows this reference.
+The intermediate `go/v0.0.1` used UTF-16 ordering; its tag is retained unchanged.
+VAX-specific ASCII escaping and decimal-number rules are preserved. ASCII-key
+histories remain byte-compatible. Preserve original SAE bytes and encoder versions
+for affected Unicode-key histories made with `go/v0.0.1` or earlier TypeScript;
+do not silently rewrite hashes. See [the compatibility correction](../docs/SPECIFICATION.md#211-canonicalization-compatibility-correction).
 
-Go tests always run the module-packaged golden vectors, including when testing a
-downloaded release. In a repository checkout they also verify that this fixture
-matches the shared root `test-vectors.json` consumed by TypeScript.
+Go tests always run module-packaged vectors. Repository tests also require this
+fixture to match the root `test-vectors.json` consumed by TypeScript.
 
 ---
 
